@@ -104,7 +104,8 @@ namespace DgusPlus
 
         static ToolStripMenuItem Sub(string text, ToolStripItem model, params ToolStripItem[] items)
         {
-            ToolStripMenuItem m = new ToolStripMenuItem(text);
+            ToolStripMenuItem m = new ToolStripMenuItem();
+            Loc.Bind(delegate(string s) { m.Text = s; }, text);
             Style(m, model);
             foreach (ToolStripItem it in items)
             {
@@ -117,11 +118,12 @@ namespace DgusPlus
 
         static ToolStripMenuItem Item(string text, Act act)
         {
-            ToolStripMenuItem m = new ToolStripMenuItem(text);
+            ToolStripMenuItem m = new ToolStripMenuItem();
+            Loc.Bind(delegate(string s) { m.Text = s; }, text);
             Act a = act;
             m.Click += delegate { Guard(delegate { Run(a); }); };
             if (act == Act.SameW || act == Act.SameH || act == Act.SameBoth)
-                m.ToolTipText = "The reference is the element you right-clicked";
+                Loc.Bind(delegate(string s) { m.ToolTipText = s; }, "The reference is the element you right-clicked");
             return m;
         }
 

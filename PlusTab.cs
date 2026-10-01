@@ -71,7 +71,7 @@ namespace DgusPlus
 
             AddSep(flow);
             Label tl = new Label();
-            tl.Text = "Theme:";
+            Loc.Bind(delegate(string s) { tl.Text = s; }, "Theme:");
             tl.AutoSize = true;
             tl.ForeColor = Theme.RibText;
             tl.Font = Theme.UiFont;
@@ -79,17 +79,28 @@ namespace DgusPlus
             flow.Controls.Add(tl);
             ComboBox theme = new ComboBox();
             theme.DropDownStyle = ComboBoxStyle.DropDownList;
-            theme.Items.AddRange(new object[] { "Dark", "Light", "Original" });
+            string[] themeNames = { "Dark", "Light", "Original" };
+            foreach (string n in themeNames) theme.Items.Add(Loc.T(n));
+            bool relabel = false;
+            Loc.Changed += delegate
+            {
+                int sel = theme.SelectedIndex;
+                relabel = true;
+                for (int i = 0; i < themeNames.Length; i++) theme.Items[i] = Loc.T(themeNames[i]);
+                theme.SelectedIndex = sel;
+                relabel = false;
+            };
             theme.SelectedIndex = Plus.Cfg.Theme == "dark" ? 0 : Plus.Cfg.Theme == "light" ? 1 : 2;
             theme.Font = Theme.UiFont;
             theme.Width = 120;
             theme.Margin = new Padding(2, 9, 4, 0);
             theme.SelectedIndexChanged += delegate
             {
+                if (relabel) return;
                 Plus.Cfg.Theme = theme.SelectedIndex == 0 ? "dark" : theme.SelectedIndex == 1 ? "light" : "original";
                 Plus.Cfg.Save();
                 Theme.Reapply();
-                MessageBox.Show("The theme will be fully applied after restarting DGUS.", "DGUS+");
+                MessageBox.Show(Loc.T("The theme will be fully applied after restarting DGUS."), "DGUS+");
             };
             flow.Controls.Add(theme);
 
@@ -128,13 +139,17 @@ namespace DgusPlus
         static Button AddButton(FlowLayoutPanel flow, string text, string tip, EventHandler click)
         {
             Button b = new RibbonButton();
-            b.Text = text;
+            Loc.Bind(delegate(string s) { b.Text = s; b.Invalidate(); }, text);
             b.AutoSize = true;
             b.MinimumSize = new Size(80, 40);
             b.Font = Theme.UiFont;
             b.Margin = new Padding(3, 4, 3, 0);
             b.Click += delegate(object s, EventArgs e) { Plus.Guard(delegate { click(s, e); }); };
-            if (tip != null) new ToolTip().SetToolTip(b, tip);
+            if (tip != null)
+            {
+                ToolTip tt = new ToolTip();
+                Loc.Bind(delegate(string s) { tt.SetToolTip(b, s); }, tip);
+            }
             flow.Controls.Add(b);
             return b;
         }
@@ -144,7 +159,7 @@ namespace DgusPlus
         static void AddCheck(FlowLayoutPanel flow, string text, bool value, BoolHandler changed)
         {
             CheckBox c = new CheckBox();
-            c.Text = text;
+            Loc.Bind(delegate(string s) { c.Text = s; }, text);
             c.Checked = value;
             c.AutoSize = true;
             c.ForeColor = Theme.RibText;

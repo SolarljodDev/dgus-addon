@@ -30,6 +30,7 @@ namespace DgusPlus
                 if (File.Exists(lang) && Regex.IsMatch(File.ReadAllText(lang), @"language\s*=\s*Russian", RegexOptions.IgnoreCase))
                 {
                     restoreRussian = true;
+                    Loc.Russian = true;
                     WritePrivateProfileString("Language", "Language", "English", lang);
                 }
             }
@@ -70,6 +71,7 @@ namespace DgusPlus
             ComboBox cb = R.Get(main, "comboBox5") as ComboBox;
             if (cb == null || cb.Items.Count != 2) return;
             cb.Items.Add("Русский");
+            cb.SelectedIndexChanged += delegate { Loc.SetRussian(cb.SelectedIndex == 2); };
             if (restoreRussian)
             {
                 restoreRussian = false;

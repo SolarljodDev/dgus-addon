@@ -26,7 +26,7 @@ namespace DgusPlus
         {
             if (string.IsNullOrEmpty(Globel.ProjectPath))
             {
-                MessageBox.Show(owner, "Open a project first.", "DGUS+");
+                MessageBox.Show(owner, Loc.T("Open a project first."), "DGUS+");
                 return;
             }
             using (UploadForm f = new UploadForm()) f.ShowDialog(owner);
@@ -34,26 +34,26 @@ namespace DgusPlus
 
         UploadForm()
         {
-            Text = "Upload to display";
+            Text = Loc.T("Upload to display");
             Font = Theme.UiFont;
             ClientSize = new Size(620, 560);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
 
-            AddLabel("Port", 12, 14);
+            AddLabel(Loc.T("Port"), 12, 14);
             port.SetBounds(90, 10, 120, 24);
             port.DropDownStyle = ComboBoxStyle.DropDown;
             port.Items.AddRange(SerialPort.GetPortNames());
             port.Text = Plus.Cfg.DisplayPort;
             if (port.Text.Length == 0 && port.Items.Count > 0) port.SelectedIndex = 0;
 
-            AddLabel("Baud rate", 225, 14);
+            AddLabel(Loc.T("Baud rate"), 225, 14);
             baud.SetBounds(290, 10, 90, 24);
             baud.Items.AddRange(new object[] { "115200", "230400", "460800", "921600" });
             baud.Text = Plus.Cfg.DisplayBaud.ToString();   // последняя использованная; у нового пользователя 115200
 
-            all.Text = "Select all";
+            all.Text = Loc.T("Select all");
             all.AutoSize = true;
             all.Location = new Point(12, 44);
             all.CheckedChanged += delegate
@@ -86,10 +86,10 @@ namespace DgusPlus
             log.ReadOnly = true;
             log.ScrollBars = ScrollBars.Vertical;
 
-            start.Text = "Upload";
+            start.Text = Loc.T("Upload");
             start.SetBounds(412, 520, 96, 30);
             start.Click += delegate { Plus.Guard(StartUpload); };
-            stop.Text = "Stop";
+            stop.Text = Loc.T("Stop");
             stop.SetBounds(512, 520, 96, 30);
             stop.Click += delegate
             {
@@ -129,7 +129,7 @@ namespace DgusPlus
         {
             List<string> pick = new List<string>();
             foreach (object o in files.CheckedItems) pick.Add(((Item)o).Path);
-            if (pick.Count == 0) { MessageBox.Show(this, "Tick the files to upload.", "DGUS+"); return; }
+            if (pick.Count == 0) { MessageBox.Show(this, Loc.T("Tick the files to upload."), "DGUS+"); return; }
             int b;
             if (!int.TryParse(baud.Text, out b)) b = 115200;
             Plus.Cfg.DisplayPort = port.Text.Trim();
@@ -145,7 +145,7 @@ namespace DgusPlus
             DisplayUpload.Job j = DisplayUpload.Current;
             bool running = j != null && j.State == "running";
             start.Enabled = !running;
-            stop.Text = running ? "Stop" : "Close";
+            stop.Text = running ? Loc.T("Stop") : Loc.T("Close");
             if (j == null) return;
             bar.Value = j.BytesTotal == 0 ? 0 : (int)Math.Min(100, 100 * j.BytesDone / j.BytesTotal);
             lock (j.Log)
@@ -158,7 +158,7 @@ namespace DgusPlus
         {
             DisplayUpload.Job j = DisplayUpload.Current;
             if (j != null && j.State == "running" &&
-                MessageBox.Show(this, "An upload is running. Stop it?", "DGUS+", MessageBoxButtons.YesNo) != DialogResult.Yes)
+                MessageBox.Show(this, Loc.T("An upload is running. Stop it?"), "DGUS+", MessageBoxButtons.YesNo) != DialogResult.Yes)
             {
                 e.Cancel = true;
                 return;

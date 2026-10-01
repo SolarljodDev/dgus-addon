@@ -31,7 +31,7 @@ namespace DgusPlus
                 else
                     Plus.Guard(delegate { Browser.OpenTool("generator.html"); });
             };
-            new ToolTip().SetToolTip(link, "Shift+click — DWIN generator");
+            new ToolTip().SetToolTip(link, Loc.T("Shift+click — DWIN generator"));
         }
 
         static Control Find(Control root, string name)

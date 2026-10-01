@@ -13,7 +13,7 @@ namespace DgusPlus
         {
             if (McpServer.Port == 0)
             {
-                MessageBox.Show("The built-in DGUS+ server is disabled (McpEnabled=False in DgusPlus.ini).", "DGUS+");
+                MessageBox.Show(Loc.T("The built-in DGUS+ server is disabled (McpEnabled=False in DgusPlus.ini)."), "DGUS+");
                 return;
             }
             string url = "http://127.0.0.1:" + McpServer.Port + "/fonts/" + page;

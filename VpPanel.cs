@@ -104,7 +104,7 @@ namespace DgusPlus
             filter.Dock = DockStyle.Top;
             filter.BorderStyle = BorderStyle.FixedSingle;
             filter.TextChanged += delegate { Rebuild(); };
-            SetCue(filter, "Filter: address, type or name");
+            Loc.Bind(delegate(string s) { SetCue(filter, s); }, "Filter: address, type or name");
 
             list = new ListView();
             list.Dock = DockStyle.Fill;
@@ -116,8 +116,10 @@ namespace DgusPlus
             list.BorderStyle = BorderStyle.None;
             list.OwnerDraw = true;
             list.Columns.Add("VP", 88);
-            list.Columns.Add("Type", 100);
-            list.Columns.Add("Name", 120);
+            ColumnHeader typeCol = list.Columns.Add("Type", 100);
+            Loc.Bind(delegate(string s) { typeCol.Text = s; }, "Type");
+            ColumnHeader nameCol = list.Columns.Add("Name", 120);
+            Loc.Bind(delegate(string s) { nameCol.Text = s; }, "Name");
             list.DrawColumnHeader += OnDrawHeader;
             list.DrawItem += delegate(object s, DrawListViewItemEventArgs e) { e.DrawDefault = false; };
             list.DrawSubItem += OnDrawSubItem;
@@ -169,15 +171,15 @@ namespace DgusPlus
                 ListViewItem it = new ListViewItem(new string[] { e.RangeText, e.Type, e.Name });
                 it.Tag = e;
                 if (e.Conflict != VpConflict.None)
-                    it.ToolTipText = (e.Conflict == VpConflict.Overlap ? "Overlaps with: " : "Shares address with: ") + e.ConflictWith;
+                    it.ToolTipText = (e.Conflict == VpConflict.Overlap ? Loc.T("Overlaps with: ") : Loc.T("Shares address with: ")) + e.ConflictWith;
                 list.Items.Add(it);
                 shown++;
             }
             list.ShowItemToolTips = true;
             list.EndUpdate();
             FitColumns();
-            summary.Text = "Elements with VP: " + shown +
-                           (overlaps > 0 ? "   ⚠ overlaps: " + overlaps : "");
+            summary.Text = Loc.T("Elements with VP: ") + shown +
+                           (overlaps > 0 ? Loc.T("   ⚠ overlaps: ") + overlaps : "");
             summary.ForeColor = overlaps > 0 ? Theme.Warn : Theme.TextDim;
             SyncSelection();
         }
