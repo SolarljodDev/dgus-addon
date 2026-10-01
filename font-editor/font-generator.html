@@ -159,6 +159,8 @@ const genYNudge = document.getElementById('genYNudge');
 const genThreshold = document.getElementById('genThreshold');
 const genWeight = document.getElementById('genWeight');
 const genMode = document.getElementById('genMode');
+// generator.html?mode=gray (link in DGUS) opens with the 4-bit mode on; the first automatic font pick must not switch it back.
+let keepGray = /[?&]mode=gray/.test(location.search);
 const genGamma = document.getElementById('genGamma');
 const genSpace = document.getElementById('genSpace');
 const thresholdField = document.getElementById('thresholdField');
@@ -723,7 +725,8 @@ function fillFromProjectFont(file){
   if (list.length){ blocks = list; renderBlockList(); }
   const w = stem.match(/_wght(\d+)/);
   if (w) genWeight.value = w[1];
-  genMode.value = /_Gray4(?:_|$)/i.test(stem) ? 'gray' : 'mono';
+  genMode.value = keepGray || /_Gray4(?:_|$)/i.test(stem) ? 'gray' : 'mono';
+  keepGray = false;
   applyMode();
   if (!fontFamily){
     fontBaseName = (dims ? stem.slice(0, dims.at) : stem).replace(/_wght\d+/, '').replace(/_+$/, '') || 'font';
@@ -930,6 +933,7 @@ async function runJob(id){
     await post({ok:false, error: String((e && e.message) || e)});
   }
 }
+if (keepGray){ genMode.value = 'gray'; genMode.dispatchEvent(new Event('change')); }
 if (JOB_ID) runJob(JOB_ID);
 </script>
 </body>

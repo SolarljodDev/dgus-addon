@@ -65,13 +65,25 @@ namespace DgusPlus
             return true;
         }
 
+        // DGUS пишет в TOOLconfig.ini язык 2 — внешние инструменты DWIN тогда показывают свой машинный перевод
+        // («Книжный указатель», «Установи шрифт»); с английским они читаются лучше.
+        static void KeepToolsEnglish()
+        {
+            string ini = Path.Combine(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "TOOL"), "config.ini");
+            if (File.Exists(ini)) WritePrivateProfileString("language", "en", "1", ini);
+        }
+
         // Выбор пункта запускает штатный обработчик DGUS: он пишет Lang.ini и сразу перерисовывает тексты.
         public static void Attach(Form main)
         {
             ComboBox cb = R.Get(main, "comboBox5") as ComboBox;
             if (cb == null || cb.Items.Count != 2) return;
             cb.Items.Add("Русский");
-            cb.SelectedIndexChanged += delegate { Loc.SetRussian(cb.SelectedIndex == 2); };
+            cb.SelectedIndexChanged += delegate
+            {
+                Loc.SetRussian(cb.SelectedIndex == 2);
+                if (cb.SelectedIndex == 2) KeepToolsEnglish();
+            };
             if (restoreRussian)
             {
                 restoreRussian = false;
