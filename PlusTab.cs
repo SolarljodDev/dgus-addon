@@ -153,7 +153,7 @@ namespace DgusPlus
                 Loc.Bind(delegate(string s) { exportTip.SetToolTip(exp, s); },
                     "Writes the list of controls to TouchConfig.xls and DisplayConfig.xls in the project folder");
                 Loc.Bind(delegate(string s) { exportTip.SetToolTip(imp, s); },
-                    "Rebuilds ALL controls on all pages from those xls files; existing controls are erased");
+                    "Rebuilds ALL controls on all pages from TouchConfig.xls and DisplayConfig.xls (you pick the folder); existing controls are erased");
             }
             bool hide = !Plus.Cfg.ShowExportImport;
             int shift = 0;
