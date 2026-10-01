@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Редактор шрифтов</title>
+<style>
+  :root{
+    --bg:#1e1f22; --panel:#2b2d30; --panel-alt:#25272a; --border:#3c3f43; --input:#1e1f22;
+    --fg:#dfe1e5; --muted:#9a9da5; --accent:#3d7eff; --selection:#2e4470; --button:#3a3d42;
+    --button-hover:#474b51; --group:#3d7eff; --bad:#ff5f6d; --dirty:#e3a33b;
+    --pixel-on:#dfe1e5; --pixel-off:#1e1f22; --grid-line:rgba(128,128,128,0.18);
+  }
+</style>
+<link rel="stylesheet" href="dgus.css">
+<style>
+  #topbar{display:flex;gap:8px;align-items:center;padding:8px 10px;flex-wrap:wrap;
+    border-bottom:1px solid var(--border);background:var(--panel);}
+  #topbar input[type=number]{width:52px;}
+  #projSel{max-width:300px;}
+  #search{width:120px;}
+  #adv{position:relative;}
+  #adv summary{cursor:pointer;padding:4px 10px;border:1px solid var(--border);background:var(--button);
+    list-style:none;min-height:26px;}
+  #adv summary::-webkit-details-marker{display:none;}
+  #adv summary:hover{background:var(--button-hover);}
+  #adv[open] summary{border-color:var(--accent);}
+  #advBody{position:absolute;z-index:5;top:100%;left:0;margin-top:2px;padding:10px;min-width:280px;
+    background:var(--panel);border:1px solid var(--accent);display:grid;grid-template-columns:auto 1fr;
+    gap:8px 10px;align-items:center;}
+  #advBody input{width:100%;}
+  #advBody .dims{display:flex;gap:6px;align-items:center;}
+  #content{display:flex;flex:1;min-height:0;}
+  #grid{flex:1 1 auto;min-width:0;overflow:auto;padding:8px;display:flex;flex-wrap:wrap;align-content:flex-start;
+    gap:3px;align-items:flex-start;}
+  .thumb{cursor:pointer;}
+  .thumb:hover{border-color:var(--muted);}
+  .thumb.selected{border-color:var(--accent);}
+  .thumb.dirty{border-color:var(--dirty);}
+  .thumb-canvas-wrap{position:relative;}
+  .baseline-mark{position:absolute;left:0;right:0;height:1px;background:#ff5555;
+    opacity:0.65;pointer-events:none;}
+  #resizer{width:5px;background:var(--border);cursor:col-resize;flex-shrink:0;user-select:none;}
+  #resizer:hover{background:var(--muted);}
+  #panel{flex:0 0 auto;width:fit-content;max-width:1200px;padding:12px;border-left:1px solid var(--border);
+    overflow:auto;background:var(--panel);min-width:250px;}
+  #fontList{display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:8px;}
+  #fontList button{min-width:420px;text-align:left;display:flex;gap:14px;padding:6px 12px;}
+  #fontList .id{min-width:24px;color:var(--muted);}
+  #fontList .size{margin-left:auto;color:var(--muted);}
+  #editorTitle{margin:0 0 8px;font-size:13px;}
+  #editorCanvas{image-rendering:pixelated;border:1px solid var(--border);cursor:crosshair;
+    display:block;margin:0 auto 10px;}
+  .row{display:flex;gap:6px;margin-bottom:8px;justify-content:center;}
+  .nav{display:flex;justify-content:space-between;margin-top:10px;}
+  .shiftpad{display:grid;grid-template-columns:repeat(3,40px);grid-template-rows:repeat(3,30px);
+    gap:4px;justify-content:center;margin:8px auto;}
+  .shiftpad button{width:100%;height:100%;padding:0;}
+  #status{padding:3px 10px;border-top:1px solid var(--border);background:var(--panel-alt);
+    color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+</style>
+</head>
+<body>
+<div id="topbar">
+  <select id="projSel" style="display:none"></select>
+  <button id="btnOpen">Файл…</button>
+  <input id="fileInput" type="file" accept=".bin" style="display:none">
+  <button id="btnSave" class="primary" disabled>Сохранить</button>
+  <div class="sep"></div>
+  <input id="search" type="text" placeholder="Код или символ" disabled>
+  <input id="zoomRange" type="range" min="1" max="5" step="0.5" value="2" disabled style="width:90px" title="Масштаб">
+  <label>База</label>
+  <input id="baselineInput" type="number" min="0" max="24" step="1" value="18" disabled>
+  <button id="btnAutoBaseline" disabled title="Вычислить базовую линию по цифрам и заглавным">Авто</button>
+  <details id="adv">
+    <summary>Формат файла</summary>
+    <div id="advBody">
+      <label>Глиф</label>
+      <div class="dims">
+        <input id="glyphWInput" type="number" min="1" max="256" step="1" value="24" disabled>×
+        <input id="glyphHInput" type="number" min="1" max="256" step="1" value="24" disabled>
+      </div>
+      <label>Смещение</label>
+      <input id="offsetInput" type="number" min="0" step="1" value="0" disabled
+             title="Байт, с которого начинается глиф 0 — для дампа прошивки, где таблица шрифта лежит не с начала файла">
+      <label>Код глифа 0</label>
+      <input id="codeBaseInput" type="text" value="0000" disabled
+             title="Unicode-код первого глифа (hex). Нужен только для подписей и поиска, в файл не пишется">
+    </div>
+  </details>
+</div>
+<div id="content">
+  <div id="grid"><div id="fontList"></div></div>
+  <div id="resizer" style="display:none"></div>
+  <div id="panel" style="display:none"></div>
+</div>
+<div id="status"></div>
+<script>
+let GLYPH_W = 24, GLYPH_H = 24;
+let ROW_BYTES = Math.ceil(GLYPH_W/8); // 3
+let GLYPH_BYTES = ROW_BYTES * GLYPH_H; // 72
+let CELL = 18; // editor cell size, adapts to glyph width
+const MARGIN = 18;
+// Byte offset where glyph 0 starts: 0 for a standalone font file, nonzero for a full firmware dump with the font table inside.
+// Save writes the whole buffer, so editing in place patches the table back into the untouched dump.
+let BUFFER_OFFSET = 0;
+// Real code of glyph #0 (the .bin has no such field): used only for labels and search, never touches file bytes, resets on file load.
+let CODE_BASE = 0;
+
+function recomputeGlyphMetrics(){
+  ROW_BYTES = Math.ceil(GLYPH_W/8);
+  GLYPH_BYTES = ROW_BYTES * GLYPH_H;
+  CELL = Math.max(5, Math.min(18, Math.floor(560/GLYPH_W)));
+}
+
+// Reads a byte offset from a name like "extract_12x24_1048576.bin" (it comes after WxH so it cannot be mistaken for dimensions).
+function detectOffsetFromName(name){
+  const m = String(name).match(/\d{1,3}\s*[_xX*]\s*\d{1,3}_(\d{4,})/);
+  if (m){
+    const v = parseInt(m[1],10);
+    if (!isNaN(v) && v>=0) return v;
+  }
+  return null;
+}
+
+// Try to read glyph dimensions from a name like "18_JetBrains_24_24.bin" or "44x44".
+// Scans every number pair and takes the first plausible one, so prefixes such as
+// "23_Roboto_wght700_64_64_…" (where "700_64" comes first) still resolve to 64x64.
+function detectDimsFromName(name){
+  const re = /(?<!\d)(\d{1,3})\s*[_xX*]\s*(\d{1,3})(?!\d)/g;
+  let m;
+  while ((m = re.exec(String(name)))){
+    const a = parseInt(m[1],10), b = parseInt(m[2],10);
+    if (a>=4 && a<=256 && b>=4 && b<=256) return {w:a, h:b};
+    re.lastIndex = m.index + 1; // overlapping pairs: "700_64_64" -> try "64_64" too
+  }
+  return null;
+}
+
+// Glued Unicode ranges as written by font-generator into the file name:
+// "…_ASCII_0020-007E_Cyrillic_0400-04FF.bin" -> glyphs 0..94 = U+0020..U+007E,
+// then 95.. = U+0400.. . When present, labels/search use these real codes.
+let RANGES = null; // [{label, start, end, first}] — first = index of the range's first glyph
+function parseRangesFromName(name){
+  const re = /([A-Za-z][A-Za-z0-9]*)_([0-9A-Fa-f]{1,6})-([0-9A-Fa-f]{1,6})/g;
+  const list = []; let m, first = 0;
+  while ((m = re.exec(String(name)))){
+    const s = parseInt(m[2],16), e = parseInt(m[3],16);
+    if (isNaN(s) || isNaN(e) || e < s) continue;
+    list.push({label:m[1], start:s, end:e, first});
+    first += e - s + 1;
+  }
+  return list.length ? list : null;
+}
+function codeOf(idx){
+  if (RANGES){
+    for (const r of RANGES) if (idx >= r.first && idx <= r.first + r.end - r.start) return r.start + idx - r.first;
+    return -1;
+  }
+  return CODE_BASE + idx;
+}
+function indexOfCode(cp){
+  if (RANGES){
+    for (const r of RANGES) if (cp >= r.start && cp <= r.end) return r.first + cp - r.start;
+    return -1;
+  }
+  return cp - CODE_BASE;
+}
+function codeLabel(idx){ const c = codeOf(idx); return c < 0 ? '----' : hex4(c); }
+function codeLabelGrouped(idx){ const c = codeOf(idx); return c < 0 ? '-- --' : hex4grouped(c); }
+
+// CP1251 high byte (0x80-0xBF) -> unicode code point, 0 = undefined
+const CP1251_HIGH = [
+ 0x0402,0x0403,0x201A,0x0453,0x201E,0x2026,0x2020,0x2021,
+ 0x20AC,0x2030,0x0409,0x2039,0x040A,0x040C,0x040B,0x040F,
+ 0x0452,0x2018,0x2019,0x201C,0x201D,0x2022,0x2013,0x2014,
+ 0,0x2122,0x0459,0x203A,0x045A,0x045C,0x045B,0x045F,
+ 0x00A0,0x040E,0x045E,0x0408,0x00A4,0x0490,0x00A6,0x00A7,
+ 0x0401,0x00A9,0x0404,0x00AB,0x00AC,0x00AD,0x00AE,0x0407,
+ 0x00B0,0x00B1,0x0406,0x0456,0x0491,0x00B5,0x00B6,0x00B7,
+ 0x0451,0x2116,0x0454,0x00BB,0x0458,0x0405,0x0455,0x0457
+];
+
+function glyphChar(idx){
+  // With glued ranges or a code base set, the file is a Unicode table
+  // (glyph i == codepoint codeOf(i)), not a CP1251 codepage.
+  if (RANGES || CODE_BASE){
+    const cp = codeOf(idx);
+    if (cp < 0x20) return '';
+    try { return String.fromCodePoint(cp); } catch(e){ return ''; }
+  }
+  if (idx>=0x20 && idx<0x7F) return String.fromCharCode(idx);
+  if (idx>=0x80 && idx<0xC0){ const c=CP1251_HIGH[idx-0x80]; return c?String.fromCodePoint(c):''; }
+  if (idx>=0xC0 && idx<0xE0) return String.fromCodePoint(0x0410+(idx-0xC0));
+  if (idx>=0xE0 && idx<0x100) return String.fromCodePoint(0x0430+(idx-0xE0));
+  return '';
+}
+function charToGlyphIndex(ch){
+  const cp = ch.codePointAt(0);
+  if (RANGES || CODE_BASE) return indexOfCode(cp);
+  if (cp>=0x20 && cp<0x7F) return cp;
+  if (cp>=0x0410 && cp<=0x042F) return 0xC0+(cp-0x0410);
+  if (cp>=0x0430 && cp<=0x044F) return 0xE0+(cp-0x0430);
+  for(let i=0;i<CP1251_HIGH.length;i++) if (CP1251_HIGH[i]===cp) return 0x80+i;
+  return -1;
+}
+// Unicode-style 2-byte hex numbering: 0 -> "0000", 1279 -> "04FF"
+function hex4(i){ return i.toString(16).toUpperCase().padStart(4,'0'); }
+function hex4grouped(i){ const h = hex4(i); return h.slice(0,2)+' '+h.slice(2); }
+
+let buffer = null;        // Uint8Array, whole file (live/edited)
+let original = null;      // Uint8Array, pristine copy for "revert"
+let numGlyphs = 0;
+let fileHandle = null;     // FileSystemFileHandle (if supported)
+let fileName = 'font.bin';
+let dirty = new Set();
+let currentGlyph = -1;
+let thumbCanvases = [];
+let zoom = 2;
+let baselineRow = parseInt(localStorage.getItem('dwinFontBaselineRow') || '18', 10);
+
+const grid = document.getElementById('grid');
+const panel = document.getElementById('panel');
+const stats = document.getElementById('status');
+const btnOpen = document.getElementById('btnOpen');
+const fileInput = document.getElementById('fileInput');
+const btnSave = document.getElementById('btnSave');
+const searchInput = document.getElementById('search');
+const zoomRange = document.getElementById('zoomRange');
+const baselineInput = document.getElementById('baselineInput');
+const glyphWInput = document.getElementById('glyphWInput');
+const glyphHInput = document.getElementById('glyphHInput');
+const offsetInput = document.getElementById('offsetInput');
+const codeBaseInput = document.getElementById('codeBaseInput');
+const btnAutoBaseline = document.getElementById('btnAutoBaseline');
+const fontList = document.getElementById('fontList');
+
+// Цвета пикселей берём из темы DGUS+ (переменные из dgus.css).
+function cssVar(n, def){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || def; }
+function hexRGB(h){ const v = parseInt(h.replace('#',''),16); return [(v>>16)&255,(v>>8)&255,v&255]; }
+const PIXEL_ON = hexRGB(cssVar('--pixel-on','#dfe1e5')), PIXEL_OFF = hexRGB(cssVar('--pixel-off','#1e1f22'));
+baselineInput.value = baselineRow;
+
+const hasFS = 'showOpenFilePicker' in window;
+
+function getPixel(g, x, y){
+  const byteIdx = BUFFER_OFFSET + g*GLYPH_BYTES + y*ROW_BYTES + (x>>3);
+  const bit = 7 - (x & 7);
+  return (buffer[byteIdx] >> bit) & 1;
+}
+function setPixel(g, x, y, val){
+  const byteIdx = BUFFER_OFFSET + g*GLYPH_BYTES + y*ROW_BYTES + (x>>3);
+  const bit = 7 - (x & 7);
+  if (val) buffer[byteIdx] |= (1<<bit);
+  else buffer[byteIdx] &= ~(1<<bit);
+}
+
+// Baseline isn't stored in the font; estimate it from glyphs that sit on it
+// (digits + uppercase Latin/Cyrillic). Take the mode of their bottom-most row;
+// descenders (Д, Ц, Щ…) are a minority and get filtered out by the mode.
+function computeBaseline(){
+  if (!buffer || numGlyphs === 0) return null;
+  const refs = [];
+  for (let c=0x30;c<=0x39;c++) refs.push(c);   // 0-9
+  for (let c=0x41;c<=0x5A;c++) refs.push(c);   // A-Z
+  for (let c=0xC0;c<=0xDF;c++) refs.push(c);   // А-Я (CP1251)
+  const counts = {};
+  for (const idx of refs){
+    if (idx >= numGlyphs) continue;
+    let bottom = -1;
+    for (let y=0;y<GLYPH_H;y++){
+      for (let x=0;x<GLYPH_W;x++){ if (getPixel(idx,x,y)){ bottom = y; break; } }
+    }
+    if (bottom >= 0) counts[bottom] = (counts[bottom]||0) + 1;
+  }
+  let best = -1, bestN = 0;
+  for (const k in counts){ if (counts[k] > bestN){ bestN = counts[k]; best = +k; } }
+  if (best < 0) return null;
+  return Math.min(GLYPH_H, best + 1); // line just below the glyph bodies
+}
+// Real cap height: ink extent of uppercase English A-Z (the "true" pixel height,
+// which is smaller than the nominal font size / em cell).
+let capInfo = null; // {top, bottom, height}
+function computeCapHeight(){
+  if (!buffer || numGlyphs === 0) return null;
+  let top = GLYPH_H, bottom = -1, found = false;
+  for (let c=0x41;c<=0x5A;c++){           // A-Z
+    if (c >= numGlyphs) continue;
+    for (let y=0;y<GLYPH_H;y++){
+      let any = false;
+      for (let x=0;x<GLYPH_W;x++){ if (getPixel(c,x,y)){ any=true; break; } }
+      if (any){ if (y<top) top=y; if (y>bottom) bottom=y; found=true; }
+    }
+  }
+  if (!found) return null;
+  return {top, bottom, height: bottom-top+1};
+}
+function applyAutoBaseline(){
+  const b = computeBaseline();
+  if (b == null) return;
+  baselineRow = b;
+  baselineInput.value = b;
+  localStorage.setItem('dwinFontBaselineRow', String(b));
+  thumbCanvases.forEach(c=>setThumbSize(c));
+  if (currentGlyph>=0) drawEditor(document.getElementById('editorCanvas'));
+}
+btnAutoBaseline.addEventListener('click', applyAutoBaseline);
+
+async function loadBuffer(arrayBuffer, name, projName){
+  // Серый 4-бит шрифт (заголовок «DGUS_2») правке не подлежит: пиксели сглажены, «рваности» нет.
+  if (arrayBuffer.byteLength > 16 && new TextDecoder().decode(new Uint8Array(arrayBuffer, 0, 6)) === 'DGUS_2'){
+    alert('Это серый (4-битный) шрифт — в редакторе он не открывается: сглаженные пиксели вручную не правят. Меняйте кегль, базу, гамму в генераторе и генерируйте заново.');
+    try { projSel.value = ''; } catch(e){}
+    return;
+  }
+  // Только шрифт, открытый из проекта, пишется обратно в DWIN_SET по имени.
+  dgusName = projName || null;
+  buffer = new Uint8Array(arrayBuffer);
+  original = buffer.slice();
+  fileName = name || fileName;
+  const det = detectDimsFromName(fileName);
+  if (det){ GLYPH_W = det.w; GLYPH_H = det.h; }
+  const detOffset = detectOffsetFromName(fileName);
+  BUFFER_OFFSET = detOffset != null ? detOffset : 0;
+  offsetInput.value = BUFFER_OFFSET;
+  CODE_BASE = 0;
+  codeBaseInput.value = hex4(CODE_BASE);
+  RANGES = parseRangesFromName(fileName);
+  recomputeGlyphMetrics();
+  glyphWInput.value = GLYPH_W;
+  glyphHInput.value = GLYPH_H;
+  baselineInput.max = GLYPH_H;
+  if (baselineRow > GLYPH_H) baselineRow = Math.round(GLYPH_H*0.75);
+  baselineInput.value = baselineRow;
+  numGlyphs = Math.max(0, Math.floor((buffer.length - BUFFER_OFFSET) / GLYPH_BYTES));
+  dirty.clear();
+  undoStack.length = 0; redoStack.length = 0;
+  currentGlyph = -1;
+  buildGrid();
+  showEmptyPanel();
+  updateStats();
+  [btnSave, searchInput, zoomRange, baselineInput, glyphWInput, glyphHInput,
+   offsetInput, btnAutoBaseline, codeBaseInput].forEach(el=>el.disabled=false);
+  projSel.value = dgusName || '';
+  resizer.style.display = '';
+  panel.style.display = '';
+  const b = computeBaseline();
+  if (b != null){ baselineRow = b; baselineInput.value = b; thumbCanvases.forEach(c=>setThumbSize(c)); }
+  capInfo = computeCapHeight();
+  updateStats();
+  panel.style.width = ''; // re-fit panel to canvas
+}
+
+function applyDims(){
+  if (!buffer) return;
+  const w = parseInt(glyphWInput.value,10), h = parseInt(glyphHInput.value,10);
+  if (isNaN(w)||isNaN(h)||w<1||h<1||w>256||h>256) return;
+  GLYPH_W = w; GLYPH_H = h;
+  recomputeGlyphMetrics();
+  baselineInput.max = GLYPH_H;
+  if (baselineRow > GLYPH_H){ baselineRow = GLYPH_H; baselineInput.value = baselineRow; }
+  numGlyphs = Math.max(0, Math.floor((buffer.length - BUFFER_OFFSET) / GLYPH_BYTES));
+  undoStack.length = 0; redoStack.length = 0;
+  currentGlyph = -1;
+  buildGrid();
+  showEmptyPanel();
+  updateStats();
+  const b = computeBaseline();
+  if (b != null){ baselineRow = b; baselineInput.value = b; thumbCanvases.forEach(c=>setThumbSize(c)); }
+  capInfo = computeCapHeight();
+  updateStats();
+  panel.style.width = ''; // re-fit panel to canvas
+}
+glyphWInput.addEventListener('change', applyDims);
+glyphHInput.addEventListener('change', applyDims);
+
+function applyOffset(){
+  if (!buffer) return;
+  const off = parseInt(offsetInput.value,10);
+  if (isNaN(off) || off<0 || off>buffer.length) return;
+  BUFFER_OFFSET = off;
+  numGlyphs = Math.max(0, Math.floor((buffer.length - BUFFER_OFFSET) / GLYPH_BYTES));
+  undoStack.length = 0; redoStack.length = 0;
+  currentGlyph = -1;
+  buildGrid();
+  showEmptyPanel();
+  updateStats();
+  const b = computeBaseline();
+  if (b != null){ baselineRow = b; baselineInput.value = b; thumbCanvases.forEach(c=>setThumbSize(c)); }
+  capInfo = computeCapHeight();
+  updateStats();
+}
+offsetInput.addEventListener('change', applyOffset);
+
+function applyCodeBase(){
+  if (!buffer) return;
+  const raw = codeBaseInput.value.trim().replace(/^U\+/i,'').replace(/\s+/g,'');
+  if (!/^[0-9a-f]+$/i.test(raw)) return; // reject typos instead of silently mis-parsing them
+  const v = parseInt(raw, 16);
+  if (!Number.isInteger(v) || v<0 || v>0x10FFFF) return;
+  CODE_BASE = v;
+  RANGES = null; // an explicit code base overrides ranges taken from the file name
+  codeBaseInput.value = hex4(CODE_BASE);
+  buildGrid();
+  if (currentGlyph>=0) renderEditor();
+  updateStats();
+}
+codeBaseInput.addEventListener('change', applyCodeBase);
+
+async function openFile(){
+  if (hasFS){
+    try{
+      const [handle] = await window.showOpenFilePicker({
+        types:[{description:'DWIN font', accept:{'application/octet-stream':['.bin']}}]
+      });
+      fileHandle = handle;
+      const file = await handle.getFile();
+      await loadBuffer(await file.arrayBuffer(), file.name);
+    }catch(e){ /* user cancelled */ }
+  } else {
+    fileInput.click();
+  }
+}
+btnOpen.addEventListener('click', openFile);
+fileInput.addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if (!file) return;
+  fileHandle = null;
+  await loadBuffer(await file.arrayBuffer(), file.name);
+});
+
+function markSaved(){
+  original = buffer.slice();
+  dirty.clear();
+  document.querySelectorAll('.thumb.dirty').forEach(el=>el.classList.remove('dirty'));
+  updateStats();
+}
+// Шрифт проекта — в DWIN_SET (старая версия уходит в DgusPlus_backup); отдельный файл — на диск.
+btnSave.addEventListener('click', async ()=>{
+  if (!buffer) return;
+  if (dgusName){
+    const r = await fetch('/api/save?overwrite=1&name=' + encodeURIComponent(dgusName), {method:'POST', body: buffer});
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok){ alert('Не сохранено: ' + (j.error || r.status)); return; }
+    markSaved();
+    return;
+  }
+  try{
+    if (!fileHandle && hasFS){
+      fileHandle = await window.showSaveFilePicker({
+        suggestedName: fileName,
+        types:[{description:'DWIN font', accept:{'application/octet-stream':['.bin']}}]
+      });
+    }
+    if (fileHandle){
+      const writable = await fileHandle.createWritable();
+      await writable.write(buffer);
+      await writable.close();
+      markSaved();
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([buffer], {type:'application/octet-stream'}));
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+  }catch(e){ /* отмена */ }
+});
+
+function buildGrid(){
+  grid.innerHTML = '';
+  thumbCanvases = new Array(numGlyphs);
+  const frag = document.createDocumentFragment();
+  for (let i=0;i<numGlyphs;i++){
+    const wrap = document.createElement('div');
+    wrap.className = 'thumb';
+    wrap.dataset.idx = i;
+    const c = document.createElement('canvas');
+    c.width = GLYPH_W; c.height = GLYPH_H;
+    const canvasWrap = document.createElement('div');
+    canvasWrap.className = 'thumb-canvas-wrap';
+    const mark = document.createElement('div');
+    mark.className = 'baseline-mark';
+    canvasWrap.appendChild(c);
+    canvasWrap.appendChild(mark);
+    setThumbSize(c, mark);
+    const lbl = document.createElement('div');
+    lbl.className = 'lbl';
+    const ch = glyphChar(i);
+    const numDiv = document.createElement('div');
+    numDiv.textContent = codeLabel(i);
+    lbl.appendChild(numDiv);
+    if (ch){
+      const chDiv = document.createElement('div');
+      chDiv.className = 'lbl-ch';
+      chDiv.textContent = ch;
+      lbl.appendChild(chDiv);
+    }
+    wrap.title = `${codeLabelGrouped(i)}  (#${i})` + (ch ? `  '${ch}'` : '');
+    wrap.appendChild(canvasWrap);
+    wrap.appendChild(lbl);
+    wrap.addEventListener('click', ()=>selectGlyph(i));
+    frag.appendChild(wrap);
+    thumbCanvases[i] = c;
+  }
+  grid.appendChild(frag);
+  for (let i=0;i<numGlyphs;i++) drawThumb(i);
+}
+function setThumbSize(c, mark){
+  const px = Math.round(GLYPH_W * zoom);
+  const py = Math.round(GLYPH_H * zoom);
+  c.style.width = px+'px';
+  c.style.height = py+'px';
+  if (!mark) mark = c.nextElementSibling;
+  mark.style.top = Math.round(baselineRow/GLYPH_H*py)+'px';
+}
+function drawThumb(idx){
+  const c = thumbCanvases[idx];
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(GLYPH_W, GLYPH_H);
+  for (let y=0;y<GLYPH_H;y++){
+    for (let x=0;x<GLYPH_W;x++){
+      const on = getPixel(idx,x,y);
+      const o = (y*GLYPH_W+x)*4;
+      const p = on ? PIXEL_ON : PIXEL_OFF;
+      img.data[o]=p[0]; img.data[o+1]=p[1]; img.data[o+2]=p[2]; img.data[o+3]=255;
+    }
+  }
+  ctx.putImageData(img,0,0);
+}
+
+zoomRange.addEventListener('input', ()=>{
+  zoom = parseFloat(zoomRange.value);
+  thumbCanvases.forEach(c=>setThumbSize(c));
+});
+
+baselineInput.addEventListener('input', ()=>{
+  const v = parseInt(baselineInput.value, 10);
+  if (isNaN(v) || v<0 || v>GLYPH_H) return;
+  baselineRow = v;
+  localStorage.setItem('dwinFontBaselineRow', String(v));
+  thumbCanvases.forEach(c=>setThumbSize(c));
+  if (currentGlyph>=0) drawEditor(document.getElementById('editorCanvas'));
+});
+
+function jumpTo(idx){
+  if (idx<0 || idx>=numGlyphs) return;
+  selectGlyph(idx);
+  const el = grid.children[idx];
+  if (el) el.scrollIntoView({block:'center', inline:'center'});
+}
+searchInput.addEventListener('keydown', (e)=>{ if (e.key==='Enter') doSearch(); });
+function doSearch(){
+  const raw = searchInput.value.trim();
+  if (!raw) return;
+  const noSpace = raw.replace(/\s+/g,'');
+  let idx = -1;
+  if (/^0x/i.test(noSpace)){
+    idx = indexOfCode(parseInt(noSpace,16));            // explicit hex code
+  } else if (raw.includes(' ') || /[a-f]/i.test(noSpace) || /^[0-9a-f]{4}$/i.test(noSpace)){
+    idx = indexOfCode(parseInt(noSpace,16));            // hex-looking code: "04 FF", "4ff", "04FF"
+  } else if (/^\d+$/.test(noSpace)){
+    idx = parseInt(noSpace,10);                         // plain decimal index
+  } else if (raw.length===1){
+    idx = charToGlyphIndex(raw);                        // a character
+  }
+  if (idx>=0 && idx<numGlyphs) jumpTo(idx);
+}
+
+function showEmptyPanel(){
+  panel.innerHTML = '';
+}
+function selectGlyph(idx){
+  if (currentGlyph>=0){
+    const prevEl = grid.children[currentGlyph];
+    if (prevEl) prevEl.classList.remove('selected');
+  }
+  currentGlyph = idx;
+  const el = grid.children[idx];
+  if (el) el.classList.add('selected');
+  renderEditor();
+}
+function renderEditor(){
+  const idx = currentGlyph;
+  const ch = glyphChar(idx);
+  panel.innerHTML = `
+    <div id="editorTitle">${codeLabelGrouped(idx)}  (#${idx})${ch ? `  ${ch}` : ''}</div>
+    <canvas id="editorCanvas" width="${MARGIN+GLYPH_W*CELL}" height="${MARGIN+GLYPH_H*CELL}"></canvas>
+    <div class="row">
+      <button data-act="clear">Очистить</button>
+      <button data-act="fill">Заполнить</button>
+      <button data-act="invert">Инвертировать</button>
+    </div>
+    <div class="shiftpad">
+      <span></span><button data-act="up">▲</button><span></span>
+      <button data-act="left">◀</button><button data-act="revert" title="Восстановить из файла">⟲</button><button data-act="right">▶</button>
+      <span></span><button data-act="down">▼</button><span></span>
+    </div>
+    <div class="nav">
+      <button data-act="prev">← Назад</button>
+      <button data-act="next">Далее →</button>
+    </div>
+  `;
+  const canvas = document.getElementById('editorCanvas');
+  drawEditor(canvas);
+  panel.querySelectorAll('button[data-act]').forEach(b=>{
+    b.addEventListener('click', ()=>handleAction(b.dataset.act));
+  });
+  setupPainting(canvas);
+}
+function drawEditor(canvas){
+  const ctx = canvas.getContext('2d');
+  const cs = getComputedStyle(document.documentElement);
+  const pixelOn = cs.getPropertyValue('--pixel-on');
+  const pixelOff = cs.getPropertyValue('--pixel-off');
+  const gridLine = cs.getPropertyValue('--grid-line');
+  const W = MARGIN+GLYPH_W*CELL, H = MARGIN+GLYPH_H*CELL;
+
+  ctx.fillStyle = cs.getPropertyValue('--panel');
+  ctx.fillRect(0,0,W,H);
+
+  for (let y=0;y<GLYPH_H;y++){
+    for (let x=0;x<GLYPH_W;x++){
+      ctx.fillStyle = getPixel(currentGlyph,x,y) ? pixelOn : pixelOff;
+      ctx.fillRect(MARGIN+x*CELL,MARGIN+y*CELL,CELL,CELL);
+    }
+  }
+  ctx.strokeStyle = gridLine;
+  ctx.lineWidth = 1;
+  for (let i=0;i<=GLYPH_W;i++){
+    ctx.beginPath(); ctx.moveTo(MARGIN+i*CELL+0.5,MARGIN); ctx.lineTo(MARGIN+i*CELL+0.5,H); ctx.stroke();
+  }
+  for (let i=0;i<=GLYPH_H;i++){
+    ctx.beginPath(); ctx.moveTo(MARGIN,MARGIN+i*CELL+0.5); ctx.lineTo(W,MARGIN+i*CELL+0.5); ctx.stroke();
+  }
+
+  // ruler labels — X across the top; Y on the left with 0 at the baseline, counting up
+  ctx.font = '9px Consolas, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = cs.getPropertyValue('--muted');
+  for (let x=0;x<GLYPH_W;x++) ctx.fillText(String(x), MARGIN+x*CELL+CELL/2, MARGIN/2);
+  for (let y=0;y<GLYPH_H;y++){
+    const v = baselineRow - y;           // 0 at baseline, positive going up, negative below
+    ctx.fillStyle = (v===0) ? '#ff5555' : cs.getPropertyValue('--muted');
+    ctx.fillText(String(v), MARGIN/2, MARGIN+y*CELL+CELL/2);
+  }
+
+  // baseline marker
+  const by = MARGIN+baselineRow*CELL;
+  ctx.strokeStyle = '#ff5555';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(MARGIN,by); ctx.lineTo(W,by); ctx.stroke();
+}
+function markDirty(idx){
+  dirty.add(idx);
+  const el = grid.children[idx];
+  if (el) el.classList.add('dirty');
+  updateStats();
+}
+function afterEdit(){
+  drawEditor(document.getElementById('editorCanvas'));
+  drawThumb(currentGlyph);
+  markDirty(currentGlyph);
+}
+
+// Each step snapshots one glyph's bytes (idx + copy). A paint stroke or a single
+// operation (clear/fill/invert/shift/revert) = one step.
+let undoStack = [], redoStack = [];
+const UNDO_LIMIT = 200;
+function snapshotGlyph(idx){
+  const base = BUFFER_OFFSET + idx*GLYPH_BYTES;
+  return { glyph: idx, bytes: buffer.slice(base, base+GLYPH_BYTES) };
+}
+function pushUndo(idx){
+  undoStack.push(snapshotGlyph(idx));
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  redoStack.length = 0; // a fresh edit invalidates the redo chain
+}
+function refreshDirty(idx){
+  const base = BUFFER_OFFSET + idx*GLYPH_BYTES;
+  let changed = false;
+  for (let i=0;i<GLYPH_BYTES;i++){ if (buffer[base+i]!==original[base+i]){ changed=true; break; } }
+  if (changed) dirty.add(idx); else dirty.delete(idx);
+  const el = grid.children[idx];
+  if (el) el.classList.toggle('dirty', changed);
+}
+function applyRestore(idx){
+  refreshDirty(idx);
+  drawThumb(idx);
+  if (currentGlyph === idx){
+    const c = document.getElementById('editorCanvas');
+    if (c) drawEditor(c);
+  } else {
+    jumpTo(idx); // switch to whichever glyph the change belongs to
+  }
+  updateStats();
+}
+function undo(){
+  if (!undoStack.length) return;
+  const snap = undoStack.pop();
+  redoStack.push(snapshotGlyph(snap.glyph));
+  buffer.set(snap.bytes, BUFFER_OFFSET + snap.glyph*GLYPH_BYTES);
+  applyRestore(snap.glyph);
+}
+function redo(){
+  if (!redoStack.length) return;
+  const snap = redoStack.pop();
+  undoStack.push(snapshotGlyph(snap.glyph));
+  buffer.set(snap.bytes, BUFFER_OFFSET + snap.glyph*GLYPH_BYTES);
+  applyRestore(snap.glyph);
+}
+window.addEventListener('keydown', (e)=>{
+  const inInput = document.activeElement && /^(INPUT|SELECT)$/.test(document.activeElement.tagName);
+  if (inInput) return; // let inputs handle their own keys
+
+  if (e.ctrlKey || e.metaKey){
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey){ undo(); e.preventDefault(); }
+    else if ((k === 'z' && e.shiftKey) || k === 'y'){ redo(); e.preventDefault(); }
+    return;
+  }
+  if (e.altKey) return;
+
+  // arrows navigate between glyphs
+  if (currentGlyph < 0) return;
+  if (e.key === 'ArrowLeft'){ if (currentGlyph>0) jumpTo(currentGlyph-1); e.preventDefault(); }
+  else if (e.key === 'ArrowRight'){ if (currentGlyph<numGlyphs-1) jumpTo(currentGlyph+1); e.preventDefault(); }
+});
+function setupPainting(canvas){
+  let painting=false, paintValue=1;
+  function cellFromEvent(e){
+    const r = canvas.getBoundingClientRect();
+    const scaleX = r.width / (MARGIN+GLYPH_W*CELL);
+    const scaleY = r.height / (MARGIN+GLYPH_H*CELL);
+    const x = Math.floor((e.clientX-r.left-MARGIN*scaleX)/(CELL*scaleX));
+    const y = Math.floor((e.clientY-r.top-MARGIN*scaleY)/(CELL*scaleY));
+    return {x, y, valid: x>=0&&x<GLYPH_W&&y>=0&&y<GLYPH_H};
+  }
+  canvas.addEventListener('mousedown', (e)=>{
+    const {x,y,valid} = cellFromEvent(e);
+    if (!valid) return;
+    pushUndo(currentGlyph); // snapshot before the stroke
+    paintValue = getPixel(currentGlyph,x,y) ? 0 : 1;
+    setPixel(currentGlyph,x,y,paintValue);
+    painting=true;
+    afterEdit();
+  });
+  canvas.addEventListener('mousemove', (e)=>{
+    if (!painting) return;
+    const {x,y,valid} = cellFromEvent(e);
+    if (!valid) return;
+    if (getPixel(currentGlyph,x,y)!==paintValue){
+      setPixel(currentGlyph,x,y,paintValue);
+      afterEdit();
+    }
+  });
+  window.addEventListener('mouseup', ()=>painting=false);
+  canvas.addEventListener('contextmenu', (e)=>e.preventDefault());
+}
+function handleAction(act){
+  const idx = currentGlyph;
+  if (['clear','fill','invert','revert','up','down','left','right'].includes(act)){
+    pushUndo(idx); // snapshot before a mutating operation
+  }
+  const base = BUFFER_OFFSET + idx*GLYPH_BYTES;
+  switch(act){
+    case 'clear':
+      for(let i=0;i<GLYPH_BYTES;i++) buffer[base+i]=0;
+      break;
+    case 'fill':
+      for(let i=0;i<GLYPH_BYTES;i++) buffer[base+i]=0xFF;
+      break;
+    case 'invert':
+      for(let i=0;i<GLYPH_BYTES;i++) buffer[base+i]^=0xFF;
+      break;
+    case 'revert':
+      for(let i=0;i<GLYPH_BYTES;i++) buffer[base+i]=original[base+i];
+      dirty.delete(idx);
+      grid.children[idx].classList.remove('dirty');
+      updateStats();
+      break;
+    case 'up': shiftGlyph(idx,0,-1); break;
+    case 'down': shiftGlyph(idx,0,1); break;
+    case 'left': shiftGlyph(idx,-1,0); break;
+    case 'right': shiftGlyph(idx,1,0); break;
+    case 'prev': if (idx>0) jumpTo(idx-1); return;
+    case 'next': if (idx<numGlyphs-1) jumpTo(idx+1); return;
+  }
+  if (act!=='revert') markDirty(idx);
+  drawEditor(document.getElementById('editorCanvas'));
+  drawThumb(idx);
+}
+function shiftGlyph(idx,dx,dy){
+  const pix = [];
+  for (let y=0;y<GLYPH_H;y++){
+    const row=[];
+    for (let x=0;x<GLYPH_W;x++) row.push(getPixel(idx,x,y));
+    pix.push(row);
+  }
+  for (let y=0;y<GLYPH_H;y++){
+    for (let x=0;x<GLYPH_W;x++){
+      const sx=x-dx, sy=y-dy;
+      const val = (sx>=0&&sx<GLYPH_W&&sy>=0&&sy<GLYPH_H) ? pix[sy][sx] : 0;
+      setPixel(idx,x,y,val);
+    }
+  }
+}
+
+function updateStats(){
+  const rem = buffer ? ((buffer.length - BUFFER_OFFSET) % GLYPH_BYTES) : 0;
+  if (!buffer){ stats.textContent = ''; return; }
+  stats.textContent = `${fileName} · ${GLYPH_W}×${GLYPH_H} · глифов: ${numGlyphs}` +
+    (BUFFER_OFFSET ? ` · смещение ${BUFFER_OFFSET}` : '') +
+    (capInfo ? ` · заглавные ${capInfo.height} px` : '') +
+    (rem ? ` · ⚠ остаток ${rem} б — проверьте размер глифа и смещение` : '') +
+    (dirty.size ? ` · изменено: ${dirty.size}` : '');
+}
+
+// The panel auto-fits the glyph canvas; dragging the resizer left grows it, right shrinks it.
+const resizer = document.getElementById('resizer');
+resizer.addEventListener('mousedown', (e)=>{
+  e.preventDefault();
+  const startX = e.clientX;
+  const startW = panel.offsetWidth;
+  function onMouseMove(ev){
+    const dx = ev.clientX - startX;
+    const newW = Math.max(250, Math.min(1200, startW - dx));
+    panel.style.width = newW + 'px';
+  }
+  function onMouseUp(){
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+});
+
+// Opened from DGUS+ (/fonts/editor.html) the page lists the open project's DWIN_SET fonts, opens and writes them back;
+// standalone (file:// or another host) /api/project doesn't answer and none of this shows up.
+const projSel = document.getElementById('projSel');
+let dgusName = null; // файл DWIN_SET, из которого открыт текущий шрифт
+async function openProjectFont(name){
+  if (!name) return;
+  if (dirty.size && !confirm('Несохранённые изменения будут потеряны. Открыть другой шрифт?')){
+    projSel.value = dgusName || '';
+    return;
+  }
+  const r = await fetch('/api/file?name=' + encodeURIComponent(name), {cache:'no-store'});
+  if (!r.ok){ alert('Не удалось прочитать ' + name); projSel.value = dgusName || ''; return; }
+  fileHandle = null;
+  await loadBuffer(await r.arrayBuffer(), name, name);
+}
+async function dgusRefresh(){
+  if (!/^https?:$/.test(location.protocol)) return;
+  let info;
+  try {
+    const r = await fetch('/api/project', {cache:'no-store'});
+    if (!r.ok) return;
+    info = await r.json();
+  } catch(e){ return; }
+  const fonts = (info.files || []).filter(f=>f.kind === 'font');
+  projSel.innerHTML = '<option value="">Шрифты проекта…</option>';
+  fontList.innerHTML = '';
+  fonts.forEach(f=>{
+    const o = document.createElement('option');
+    o.value = f.name;
+    o.textContent = `${f.id != null ? f.id : '?'} · ${f.name.replace(/^\d+_/, '').replace(/\.bin$/i, '')}`;
+    projSel.appendChild(o);
+    const b = document.createElement('button');
+    b.innerHTML = `<span class="id"></span><span class="nm"></span><span class="size"></span>`;
+    b.querySelector('.id').textContent = f.id != null ? f.id : '?';
+    b.querySelector('.nm').textContent = f.name.replace(/^\d+_/, '').replace(/\.bin$/i, '');
+    b.querySelector('.size').textContent = Math.round(f.size / 1024) + ' КБ';
+    b.addEventListener('click', ()=>openProjectFont(f.name));
+    fontList.appendChild(b);
+  });
+  if (!fonts.length) fontList.textContent = 'В DWIN_SET нет шрифтов';
+  if (dgusName) projSel.value = dgusName;
+  projSel.style.display = '';
+}
+projSel.addEventListener('change', ()=>openProjectFont(projSel.value));
+dgusRefresh();
+</script>
+</body>
+</html>

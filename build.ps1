@@ -1,11 +1,11 @@
 # Сборка DgusPlus.exe (C# 3 / .NET 3.5 — тот же рантайм CLR 2.0, что у DGUS).
 #   -Target      папка DGUS V7.650 (DLL DGUS нужны как ссылки при компиляции)
 #   -Out         куда положить exe (по умолчанию — в папку DGUS)
-#   -FontEditor  папка с font-editor (index.html, font-generator.html) — встраиваются в exe
+#   -FontEditor  папка font-editor (index.html, font-generator.html, dgus.css) — встраиваются в exe
 param(
     [string]$Target = 'C:\DGUS_V7650',
     [string]$Out = '',
-    [string]$FontEditor = (Join-Path (Split-Path $PSScriptRoot) 'font-editor')
+    [string]$FontEditor = (Join-Path $PSScriptRoot 'font-editor')
 )
 if (-not $Out) { $Out = "$Target\DgusPlus.exe" }
 $ErrorActionPreference = 'Stop'

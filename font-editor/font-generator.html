@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Генератор шрифтов</title>
+<style>
+  :root{
+    --bg:#1e1f22; --panel:#2b2d30; --panel-alt:#25272a; --border:#3c3f43; --input:#1e1f22;
+    --fg:#dfe1e5; --muted:#9a9da5; --accent:#3d7eff; --selection:#2e4470; --button:#3a3d42;
+    --button-hover:#474b51; --group:#3d7eff; --bad:#ff5f6d; --warn:#e3a33b;
+    --pixel-on:#dfe1e5; --pixel-off:#1e1f22; --grid-line:rgba(128,128,128,0.18);
+  }
+</style>
+<link rel="stylesheet" href="dgus.css">
+<style>
+  body{flex-direction:row;}
+  #left{width:340px;flex:0 0 auto;overflow-x:hidden;overflow-y:auto;padding:10px;
+    border-right:1px solid var(--border);background:var(--panel);}
+  #right{flex:1;min-width:0;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px;}
+  input[type=text],input[type=number],select{width:100%;}
+  .row2{display:flex;gap:8px;margin-bottom:8px;}
+  .row2>div{flex:1;min-width:0;}
+  .row2 label{display:block;margin-bottom:2px;}
+  .row{display:flex;gap:8px;margin-bottom:8px;align-items:center;}
+  .row label{white-space:nowrap;}
+  #fontStatus{margin-top:6px;word-break:break-all;}
+  .blockRow{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;align-items:center;}
+  .blockRow input[type=text]{width:auto;}
+  .blockRow .blabel{flex:1 1 60px;min-width:60px;}
+  .blockRow .bstart,.blockRow .bend{flex:1 1 50px;min-width:50px;}
+  .blockRow .bcount{flex:0 0 auto;width:40px;color:var(--muted);white-space:nowrap;overflow:hidden;}
+  .blockRow button{flex:0 0 auto;padding:2px 8px;min-height:24px;}
+  #summary{color:var(--muted);margin-top:6px;}
+  #testCanvasWrap{display:flex;justify-content:center;margin-bottom:6px;}
+  #testCanvas{border:1px solid var(--border);image-rendering:pixelated;}
+  #grid{flex:1;overflow:auto;display:flex;flex-wrap:wrap;align-content:flex-start;gap:3px;}
+  .thumb.warn{border-color:var(--warn);}
+  #toolbar{display:flex;gap:8px;align-items:center;}
+  #actions{display:flex;gap:8px;}
+  #actions button{flex:1;}
+  #progressBar{margin-top:8px;display:none;}
+</style>
+</head>
+<body>
+  <div id="left">
+
+    <fieldset>
+      <legend>Шрифт</legend>
+      <div class="row2">
+        <div><button id="btnPickFile" style="width:100%">Файл…</button></div>
+        <div><button id="btnPickLocal" style="width:100%">Установленные…</button></div>
+      </div>
+      <input id="fileInput" type="file" accept=".ttf,.otf,.woff,.woff2" style="display:none">
+      <div class="row2" id="localFontGroup" style="display:none">
+        <div style="flex:1"><select id="localFontSelect"></select></div>
+        <div id="localStyleWrap" style="flex:1"><select id="localStyleSelect"></select></div>
+      </div>
+      <div id="fontStatus" class="ok"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Ячейка</legend>
+      <div class="row2">
+        <div><label>Ширина</label><input id="genW" type="number" min="4" max="256" value="64"></div>
+        <div><label>Высота</label><input id="genH" type="number" min="4" max="256" value="64"></div>
+      </div>
+      <div class="row2">
+        <div><label>Размер шрифта</label><input id="genFontPx" type="number" min="1" max="256" value="48"></div>
+        <div><label>База</label><input id="genBaseline" type="number" min="0" max="256" value="51" title="Строка внутри ячейки, считая от верхнего края вниз"></div>
+      </div>
+      <div class="row2">
+        <div><label>Сдвиг X</label><input id="genXNudge" type="number" step="0.5" value="0"></div>
+        <div><label>Сдвиг Y</label><input id="genYNudge" type="number" step="0.5" value="0" title="В отличие от DWIN-тула сдвигает точку рендера, а не готовый растр — низ у глифов со спусками не обрезается"></div>
+      </div>
+      <div class="row2">
+        <div><label>Тип</label><select id="genMode" title="Серый — 4 бита на пиксель (16 уровней), кодировка Unicode; выводится элементом Text II"><option value="mono">Чёрно-белый (1 бит)</option><option value="gray">Серый (4 бита)</option></select></div>
+        <div id="thresholdField"><label>Порог</label><input id="genThreshold" type="number" min="0" max="255" value="128"></div>
+        <div id="gammaField" style="display:none"><label>Гамма</label><input id="genGamma" type="number" min="0.3" max="3" step="0.1" value="1" title="Меньше 1 — текст плотнее, больше 1 — тоньше"></div>
+      </div>
+      <div class="row2">
+        <div id="spaceField" style="display:none"><label>Пробел, px</label><input id="genSpace" type="number" min="0" max="256" placeholder="авто" title="Ширина пробела; пусто — треть размера шрифта"></div>
+        <div id="weightField" style="display:none"><label>Насыщенность</label><input id="genWeight" type="number" min="1" max="1000" step="100" value="400" title="Ось wght вариативного шрифта: 400 — Regular, 700 — Bold"></div>
+      </div>
+      <div class="row"><label>Пробный символ</label><input id="testChar" type="text" maxlength="2" value="у" style="width:50px"></div>
+      <div id="testCanvasWrap"><canvas id="testCanvas" width="100" height="100"></canvas></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Диапазоны</legend>
+      <div id="blocksContainer"></div>
+      <button id="btnAddBlock">+ Диапазон</button>
+      <div id="summary"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Файл</legend>
+      <div class="row"><input id="nameInput" type="text" value="font"></div>
+      <div id="actions">
+        <button id="btnPreview">Превью</button>
+        <button id="btnExport">Скачать .bin</button>
+      </div>
+      <progress id="progressBar" value="0" max="100"></progress>
+    </fieldset>
+
+    <fieldset id="dgusBox" style="display:none">
+      <legend>Проект</legend>
+      <div class="row2">
+        <div><label>Заменить шрифт</label><select id="dgusReplace"></select></div>
+        <div style="flex:0 0 70px"><label>Номер</label><input id="dgusId" type="number" min="1" max="127"></div>
+      </div>
+      <div id="dgusIds" class="muted" style="margin-bottom:4px"></div>
+      <div id="dgusCheck" style="margin-bottom:8px;word-break:break-word"></div>
+      <button id="btnSaveProject" class="primary" style="width:100%">Сохранить в проект</button>
+      <div id="dgusStatus" style="margin-top:6px;word-break:break-all"></div>
+    </fieldset>
+
+  </div>
+
+  <div id="right">
+    <div id="toolbar">
+      <input id="zoomRange" type="range" min="1" max="4" step="0.5" value="2" style="width:120px" title="Масштаб">
+    </div>
+    <div id="grid"></div>
+  </div>
+
+<script>
+function hex4(i){ return i.toString(16).toUpperCase().padStart(4,'0'); }
+const SS = 4; // render at 4x then average+threshold, for smoother small bitmaps
+// Цвета берём из темы DGUS+ (переменные из dgus.css).
+function cssVar(n, def){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || def; }
+function hexRGB(h){ const v = parseInt(h.replace('#',''),16); return [(v>>16)&255,(v>>8)&255,v&255]; }
+const PON_CSS = cssVar('--pixel-on','#dfe1e5'), POFF_CSS = cssVar('--pixel-off','#1e1f22'), PANEL_CSS = cssVar('--panel','#2b2d30');
+const PIXEL_ON = hexRGB(PON_CSS), PIXEL_OFF = hexRGB(POFF_CSS);
+
+let fontFamily = null;
+let fontBaseName = 'font';
+let loadedStyleLabel = ''; // static style picked at load time (e.g. "Bold") — irrelevant once wght is in play
+let fontBuffer = null;
+let weightFaceCache = new Map(); // weight -> family name of a FontFace pinned to that wght instance
+let localFontsMap = null;
+let zoom = 2;
+
+const fileInput = document.getElementById('fileInput');
+const btnPickFile = document.getElementById('btnPickFile');
+const btnPickLocal = document.getElementById('btnPickLocal');
+const localFontGroup = document.getElementById('localFontGroup');
+const localFontSelect = document.getElementById('localFontSelect');
+const localStyleSelect = document.getElementById('localStyleSelect');
+const localStyleWrap = document.getElementById('localStyleWrap');
+const fontStatus = document.getElementById('fontStatus');
+
+const genW = document.getElementById('genW');
+const genH = document.getElementById('genH');
+const genFontPx = document.getElementById('genFontPx');
+const genBaseline = document.getElementById('genBaseline');
+const genXNudge = document.getElementById('genXNudge');
+const genYNudge = document.getElementById('genYNudge');
+const genThreshold = document.getElementById('genThreshold');
+const genWeight = document.getElementById('genWeight');
+const genMode = document.getElementById('genMode');
+const genGamma = document.getElementById('genGamma');
+const genSpace = document.getElementById('genSpace');
+const thresholdField = document.getElementById('thresholdField');
+const gammaField = document.getElementById('gammaField');
+const spaceField = document.getElementById('spaceField');
+const testChar = document.getElementById('testChar');
+const testCanvas = document.getElementById('testCanvas');
+const weightField = document.getElementById('weightField');
+
+const blocksContainer = document.getElementById('blocksContainer');
+const btnAddBlock = document.getElementById('btnAddBlock');
+const summaryEl = document.getElementById('summary');
+
+const nameInput = document.getElementById('nameInput');
+const btnPreview = document.getElementById('btnPreview');
+const btnExport = document.getElementById('btnExport');
+const progressBar = document.getElementById('progressBar');
+const grid = document.getElementById('grid');
+const zoomRange = document.getElementById('zoomRange');
+
+function curW(){ return Math.max(4, parseInt(genW.value,10)||64); }
+function curH(){ return Math.max(4, parseInt(genH.value,10)||64); }
+function curFontPx(){ return Math.max(1, parseFloat(genFontPx.value)||48); }
+function curBaseline(){ return Math.max(0, parseFloat(genBaseline.value)||0); }
+function curXNudge(){ return parseFloat(genXNudge.value)||0; }
+function curYNudge(){ return parseFloat(genYNudge.value)||0; }
+function curThreshold(){ return Math.min(255, Math.max(0, parseInt(genThreshold.value,10)||128)); }
+function curMode(){ return genMode.value === 'gray' ? 'gray' : 'mono'; }
+function curGamma(){ return Math.min(3, Math.max(0.3, parseFloat(genGamma.value)||1)); }
+function curSpace(){ const v = parseInt(genSpace.value,10); return isNaN(v) ? Math.round(curFontPx()/3) : Math.min(255, Math.max(0, v)); }
+function curWeight(){ return Math.min(1000, Math.max(1, parseInt(genWeight.value,10)||400)); }
+function updateFileName(){
+  const rangeParts = blocks.map(b=>{
+    const s = parseInt(b.start,16), e = parseInt(b.end,16);
+    if (isNaN(s) || isNaN(e) || e<s) return null;
+    const label = (b.label||'блок').trim().replace(/\s+/g,'').replace(/[\\/:*?"<>|]/g,'');
+    return `${label}_${b.start.toUpperCase()}-${b.end.toUpperCase()}`;
+  }).filter(Boolean).join('_');
+  const weightPart = (weightField.style.display !== 'none') ? `_wght${curWeight()}` : (loadedStyleLabel ? `_${loadedStyleLabel}` : '');
+  nameInput.value = `${fontBaseName}${weightPart}_${curW()}_${curH()}` + (rangeParts ? `_${rangeParts}` : '') + (curMode()==='gray' ? '_Gray4' : '');
+}
+
+async function loadFontFile(file){
+  const buf = await file.arrayBuffer();
+  const family = 'GenFont_' + Math.random().toString(36).slice(2);
+  const face = new FontFace(family, buf);
+  await face.load();
+  document.fonts.add(face);
+  fontFamily = family;
+  fontBuffer = buf;
+  weightFaceCache.clear();
+  fontStatus.textContent = 'Загружен: ' + file.name;
+  fontBaseName = file.name.replace(/\.[^.]+$/, '');
+  loadedStyleLabel = '';
+  updateFileName();
+  renderTestGlyph();
+  checkVariableWeight();
+}
+btnPickFile.addEventListener('click', ()=>fileInput.click());
+fileInput.addEventListener('change', async e=>{
+  const f = e.target.files[0];
+  if (f) await loadFontFile(f);
+});
+
+const hasLocalFonts = 'queryLocalFonts' in window; // Chromium only
+if (!hasLocalFonts) btnPickLocal.style.display = 'none';
+// GDI registers every non-Regular/Bold weight as its own "family" ("Inter Medium"): strip a trailing weight/style word
+// to regroup them under one typeface name.
+const TRAILING_STYLE_WORDS = /(\s+(Thin|Hairline|ExtraLight|UltraLight|Light|Regular|Normal|Book|Text|Medium|SemiBold|DemiBold|Bold|ExtraBold|UltraBold|Black|Heavy|Italic|Oblique))+\s*$/i;
+function canonicalFamily(fam){
+  const stripped = fam.replace(TRAILING_STYLE_WORDS, '').trim();
+  return stripped || fam;
+}
+btnPickLocal.addEventListener('click', async ()=>{
+  try{
+    const list = await window.queryLocalFonts();
+    const byFamily = new Map();
+    for (const f of list){
+      const key = canonicalFamily(f.family);
+      if (!byFamily.has(key)) byFamily.set(key, []);
+      byFamily.get(key).push(f);
+    }
+    localFontsMap = byFamily;
+    localFontSelect.innerHTML = '';
+    [...byFamily.keys()].sort().forEach(fam=>{
+      const opt = document.createElement('option');
+      opt.value = fam; opt.textContent = fam;
+      localFontSelect.appendChild(opt);
+    });
+    populateLocalStyles(localFontSelect.value);
+    localStyleWrap.style.display = '';
+    localFontGroup.style.display = '';
+    loadSelectedLocalFont();
+  }catch(e){ /* permission denied or cancelled */ }
+});
+localFontSelect.addEventListener('change', ()=>{
+  populateLocalStyles(localFontSelect.value);
+  localStyleWrap.style.display = ''; // unknown until (re)loaded — show it again
+  loadSelectedLocalFont();
+});
+localStyleSelect.addEventListener('change', loadSelectedLocalFont);
+function populateLocalStyles(fam){
+  const variants = (localFontsMap && localFontsMap.get(fam)) || [];
+  localStyleSelect.innerHTML = '';
+  const prefixRe = new RegExp('^' + fam.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\s*', 'i');
+  variants.forEach(v=>{
+    const full = v.fullName || `${v.family} ${v.style}`;
+    const opt = document.createElement('option');
+    opt.value = v.postscriptName; opt.textContent = full.replace(prefixRe, '').trim() || 'Regular';
+    localStyleSelect.appendChild(opt);
+  });
+  const regular = variants.find(v=>/regular/i.test(v.style));
+  if (regular) localStyleSelect.value = regular.postscriptName;
+}
+async function loadSelectedLocalFont(){
+  const fam = localFontSelect.value;
+  const variants = localFontsMap && localFontsMap.get(fam);
+  if (!variants) return;
+  const pick = variants.find(v=>v.postscriptName===localStyleSelect.value) || variants[0];
+  const blob = await pick.blob();
+  const buf = await blob.arrayBuffer();
+  const family = 'Local_' + Math.random().toString(36).slice(2);
+  const face = new FontFace(family, buf);
+  await face.load();
+  document.fonts.add(face);
+  fontFamily = family;
+  fontBuffer = buf;
+  weightFaceCache.clear();
+  fontStatus.textContent = 'Загружен: ' + fam + ' ' + pick.style + ' (системный)';
+  fontBaseName = fam;
+  loadedStyleLabel = pick.style.replace(/\s+/g,'');
+  updateFileName();
+  renderTestGlyph();
+  checkVariableWeight();
+}
+
+// Picks a wght instance via a dedicated FontFace with variationSettings — automatic font-weight matching silently did nothing.
+async function getFamilyForWeight(weight){
+  if (!fontBuffer) return fontFamily;
+  const key = String(weight);
+  if (weightFaceCache.has(key)) return weightFaceCache.get(key);
+  const fam = 'W' + weight + '_' + Math.random().toString(36).slice(2);
+  const face = new FontFace(fam, fontBuffer, {variationSettings: `'wght' ${weight}`});
+  await face.load();
+  document.fonts.add(face);
+  weightFaceCache.set(key, fam);
+  return fam;
+}
+
+// Renders straight into the W x H cell in one pass (no shift-then-crop), so ink near the edges is never clipped, unlike the DWIN tool with a large V shift.
+async function rasterizeChar(ch, W, H, baseline, fontPx, xNudge, yNudge, threshold, weight){
+  const family = await getFamilyForWeight(weight||400);
+  const cw = W*SS, chh = H*SS;
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = chh;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,cw,chh);
+  ctx.fillStyle = '#fff';
+  ctx.font = `${fontPx*SS}px "${family}"`;
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.fillText(ch, xNudge*SS, baseline*SS + yNudge*SS);
+  const data = ctx.getImageData(0,0,cw,chh).data;
+  const bits = new Uint8Array(W*H);
+  for (let ty=0; ty<H; ty++){
+    for (let tx=0; tx<W; tx++){
+      let sum=0;
+      for (let sy=0; sy<SS; sy++) for (let sx=0; sx<SS; sx++){
+        sum += data[((ty*SS+sy)*cw + (tx*SS+sx))*4 + 3]; // alpha channel = coverage
+      }
+      bits[ty*W+tx] = (sum/(SS*SS)) >= threshold ? 1 : 0;
+    }
+  }
+  return bits;
+}
+// Серый режим: 16 уровней покрытия (среднее по SS×SS подпикселям), глиф прижат к левому краю
+// ячейки, ширина — по метрике шрифта (шрифт пропорциональный: DWIN двигает курсор на эту ширину).
+async function rasterizeGray(ch, W, H, baseline, fontPx, xNudge, yNudge, weight, gamma){
+  const family = await getFamilyForWeight(weight||400);
+  const cw = W*SS, chh = H*SS;
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = chh;
+  const ctx = c.getContext('2d', {willReadFrequently:true});
+  ctx.clearRect(0,0,cw,chh);
+  ctx.fillStyle = '#fff';
+  ctx.font = `${fontPx*SS}px "${family}"`;
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  const m = ctx.measureText(ch);
+  const shift = Math.max(0, m.actualBoundingBoxLeft/SS); // ink left of the pen: move right so it isn't cut
+  ctx.fillText(ch, (xNudge+shift)*SS, baseline*SS + yNudge*SS);
+  const data = ctx.getImageData(0,0,cw,chh).data;
+  const levels = new Uint8Array(W*H);
+  let inkR = 0;
+  for (let ty=0; ty<H; ty++){
+    for (let tx=0; tx<W; tx++){
+      let sum=0;
+      for (let sy=0; sy<SS; sy++) for (let sx=0; sx<SS; sx++) sum += data[((ty*SS+sy)*cw + (tx*SS+sx))*4 + 3];
+      const a = Math.pow(sum/(SS*SS)/255, gamma);
+      const lv = Math.max(0, Math.min(15, Math.round(a*15)));
+      levels[ty*W+tx] = lv;
+      if (lv && tx+1 > inkR) inkR = tx+1;
+    }
+  }
+  const adv = m.width/SS + xNudge + shift;
+  const w = Math.min(W, Math.max(1, Math.ceil(Math.max(adv, inkR))));
+  return {levels, w};
+}
+
+// Файл DGUS «серого» шрифта (как у fontbit4 в режиме Unicode/4bit):
+//   0x000  "DGUS_2", CRC16/MODBUS (LE) по байтам с 0x08 до конца, (размер>>8)-1 (3 байта BE),
+//          0xF8, 0x01, число глифов (BE16), 0x01, 0x04, 0x80, 4 бита/пиксель, W, H, 0x01
+//   0x132/0x141  W,H / W,H/2 (как в образцах)
+//   0x1A0  таблица по кодам 0x20…0xFFFF, 5 байт на код: ширина, 0xF0 (0x30 у пробела), адрес глифа (3 байта BE)
+//   0x50100  глифы подряд, по строкам ceil(W/2) байт, старший ниббл — левый пиксель
+const GRAY_TABLE0 = 0x1A0, GRAY_NREC = 0x10000 - 0x20, GRAY_DATA0 = GRAY_TABLE0 + GRAY_NREC*5;
+function grayFileSize(count, W, H){ return GRAY_DATA0 + count * Math.ceil(W/2) * H; }
+function crc16modbus(b){
+  let c = 0xFFFF;
+  for (let i=0;i<b.length;i++){ c ^= b[i]; for (let k=0;k<8;k++) c = (c&1) ? (c>>1)^0xA001 : c>>1; }
+  return c;
+}
+function buildGrayFile(W, H, space, items){
+  const rowB = Math.ceil(W/2), cell = rowB*H;
+  const total = grayFileSize(items.length, W, H);
+  const f = new Uint8Array(total);
+  'DGUS_2'.split('').forEach((ch,i)=>f[i] = ch.charCodeAt(0));
+  f[0x0b]=0xF8; f[0x0c]=1; f[0x0d]=items.length>>8; f[0x0e]=items.length&255; f[0x0f]=1; f[0x10]=4; f[0x11]=0x80;
+  f[0x13]=4; f[0x14]=W; f[0x15]=H; f[0x16]=1;
+  f[0x132]=W; f[0x133]=H; f[0x141]=W; f[0x142]=H>>1;
+  f[GRAY_TABLE0]=space; f[GRAY_TABLE0+1]=0x30;
+  items.forEach((it,i)=>{
+    const o = GRAY_TABLE0 + (it.code-0x20)*5, off = GRAY_DATA0 + i*cell;
+    f[o]=it.w; f[o+1]=0xF0; f[o+2]=off>>16; f[o+3]=(off>>8)&255; f[o+4]=off&255;
+    for (let y=0;y<H;y++) for (let x=0;x<W;x++){
+      const v = it.levels[y*W+x];
+      if (v) f[off + y*rowB + (x>>1)] |= (x&1) ? v : v<<4;
+    }
+  });
+  const t = (total>>8)-1; f[8]=t>>16; f[9]=(t>>8)&255; f[10]=t&255;
+  const c = crc16modbus(f.subarray(8)); f[6]=c&255; f[7]=c>>8;
+  return f;
+}
+function bitsEqual(a,b){
+  if (!a || !b || a.length!==b.length) return false;
+  for (let i=0;i<a.length;i++) if (a[i]!==b[i]) return false;
+  return true;
+}
+
+// Renders a probe glyph at weight 100 vs 900 and compares pixels: the only way to know whether the wght axis does anything.
+async function checkVariableWeight(){
+  const light = await rasterizeChar('H', 64,64, 51,48, 0,0, 128, 100);
+  const boldW = await rasterizeChar('H', 64,64, 51,48, 0,0, 128, 900);
+  const variable = !bitsEqual(light, boldW);
+  weightField.style.display = variable ? '' : 'none';
+  // With a wght axis the static-style list is unreliable (named instances of a variable font often resolve to the same bytes),
+  // so only that list hides; family selection stays.
+  if (variable) localStyleWrap.style.display = 'none';
+  updateFileName();
+}
+
+const T_MARGIN = 14;
+// Цвет серого пикселя между фоном и «чернилами» темы (level 0…15).
+function grayRGB(level){
+  const t = level/15;
+  return PIXEL_OFF.map((o,i)=>Math.round(o + (PIXEL_ON[i]-o)*t));
+}
+function grayCss(level){ const c = grayRGB(level); return `rgb(${c[0]},${c[1]},${c[2]})`; }
+async function renderTestGlyph(){
+  const W = curW(), H = curH();
+  const availW = document.getElementById('testCanvasWrap').clientWidth || 300;
+  const cell = Math.max(2, Math.min(14, Math.floor((availW - T_MARGIN) / W)));
+  testCanvas.width = T_MARGIN + W*cell;
+  testCanvas.height = T_MARGIN + H*cell;
+  const ctx = testCanvas.getContext('2d');
+  ctx.fillStyle = PANEL_CSS;
+  ctx.fillRect(0,0,testCanvas.width,testCanvas.height);
+  if (!fontFamily) return;
+  const baseline = curBaseline();
+  const tch = testChar.value.slice(0,1)||'A';
+  const gray = curMode() === 'gray';
+  const gl = gray ? await rasterizeGray(tch, W, H, baseline, curFontPx(), curXNudge(), curYNudge(), curWeight(), curGamma()) : null;
+  const bits = gray ? null : await rasterizeChar(tch, W, H, baseline, curFontPx(), curXNudge(), curYNudge(), curThreshold(), curWeight());
+  for (let y=0;y<H;y++) for (let x=0;x<W;x++){
+    ctx.fillStyle = gray ? grayCss(gl.levels[y*W+x]) : (bits[y*W+x] ? PON_CSS : POFF_CSS);
+    ctx.fillRect(T_MARGIN+x*cell, T_MARGIN+y*cell, cell, cell);
+  }
+  if (gray){
+    ctx.strokeStyle = '#4da3ff'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(T_MARGIN+gl.w*cell+0.5, T_MARGIN); ctx.lineTo(T_MARGIN+gl.w*cell+0.5, T_MARGIN+H*cell); ctx.stroke();
+  }
+  ctx.strokeStyle = '#ff5555';
+  ctx.lineWidth = 1.5;
+  const by = T_MARGIN + baseline*cell;
+  ctx.beginPath(); ctx.moveTo(T_MARGIN,by); ctx.lineTo(testCanvas.width,by); ctx.stroke();
+}
+[genW,genH,genFontPx,genBaseline,genXNudge,genYNudge,genThreshold,genWeight,testChar].forEach(el=>{
+  el.addEventListener('input', renderTestGlyph);
+});
+[genW,genH,genWeight].forEach(el=>el.addEventListener('input', updateFileName));
+function applyMode(){
+  const g = curMode() === 'gray';
+  thresholdField.style.display = g ? 'none' : '';
+  gammaField.style.display = g ? '' : 'none';
+  spaceField.style.display = g ? '' : 'none';
+  updateFileName(); updateSummary(); renderTestGlyph();
+}
+genMode.addEventListener('change', applyMode);
+[genGamma,genSpace].forEach(el=>el.addEventListener('input', ()=>{ renderTestGlyph(); }));
+
+let blocks = [{label:'ASCII', start:'0020', end:'007E'}];
+function renderBlockList(){
+  blocksContainer.innerHTML = '';
+  blocks.forEach((b,i)=>{
+    const row = document.createElement('div');
+    row.className = 'blockRow';
+    row.innerHTML = `
+      <input class="blabel" type="text" placeholder="метка" value="${b.label}">
+      <input class="bstart" type="text" placeholder="0000" value="${b.start}">
+      <span style="color:var(--muted)">–</span>
+      <input class="bend" type="text" placeholder="FFFF" value="${b.end}">
+      <span class="bcount"></span>
+      <button data-i="${i}">✕</button>
+    `;
+    const [lbl, start, end] = row.querySelectorAll('input');
+    lbl.addEventListener('input', ()=>{ blocks[i].label = lbl.value; updateSummary(); });
+    start.addEventListener('input', ()=>{ blocks[i].start = start.value; updateSummary(); });
+    end.addEventListener('input', ()=>{ blocks[i].end = end.value; updateSummary(); });
+    row.querySelector('button').addEventListener('click', ()=>{ blocks.splice(i,1); renderBlockList(); updateSummary(); });
+    blocksContainer.appendChild(row);
+  });
+  updateSummary();
+}
+btnAddBlock.addEventListener('click', ()=>{
+  blocks.push({label:'Cyrillic', start:'0400', end:'04FF'});
+  renderBlockList();
+});
+
+function planGlyphs(){
+  const plan = [];
+  blocks.forEach(b=>{
+    const s = parseInt(b.start,16), e = parseInt(b.end,16);
+    if (isNaN(s) || isNaN(e) || e<s) return;
+    for (let cp=s; cp<=e; cp++) plan.push({code:cp, blockLabel:b.label||''});
+  });
+  return plan;
+}
+function updateSummary(){
+  const plan = planGlyphs();
+  const rowBytes = Math.ceil(curW()/8);
+  const glyphBytes = rowBytes*curH();
+  const gray = curMode() === 'gray';
+  const nGray = plan.filter(p=>p.code>0x20 && p.code<=0xFFFF).length;
+  summaryEl.textContent = gray
+    ? `Глифов: ${nGray} · Файл: ${grayFileSize(nGray, curW(), curH())} байт (таблица Unicode 320 КБ + глифы)`
+    : `Глифов: ${plan.length} · Файл: ${plan.length*glyphBytes} байт`;
+  updateFileName();
+  blocksContainer.querySelectorAll('.blockRow').forEach((row,i)=>{
+    const b = blocks[i];
+    const s=parseInt(b.start,16), e=parseInt(b.end,16);
+    const n = (!isNaN(s)&&!isNaN(e)&&e>=s) ? e-s+1 : 0;
+    row.querySelector('.bcount').textContent = n ? `${n} шт` : '—';
+  });
+  dgusCheck();
+}
+
+async function generateAllGray(onProgress){
+  const W=curW(), H=curH(), baseline=curBaseline(), fontPx=curFontPx(),
+        xNudge=curXNudge(), yNudge=curYNudge(), weight=curWeight(), gamma=curGamma();
+  // В таблице серого шрифта есть только коды 0x21…0xFFFF: пробел — отдельная запись, ниже 0x20 нет ничего.
+  const plan = planGlyphs().filter(p=>p.code>0x20 && p.code<=0xFFFF);
+  const seen = new Set(), uniq = plan.filter(p=>!seen.has(p.code) && seen.add(p.code));
+  const ref = fontFamily ? await rasterizeGray(String.fromCodePoint(0xE000), W,H,baseline,fontPx,xNudge,yNudge,weight,gamma) : null;
+  const results = [];
+  for (let i=0;i<uniq.length;i++){
+    const item = uniq[i];
+    const g = await rasterizeGray(String.fromCodePoint(item.code), W,H,baseline,fontPx,xNudge,yNudge,weight,gamma);
+    const bits = g.levels.map(v=>v?1:0);
+    const empty = bits.every(v=>v===0);
+    const maybeMissing = !empty && ref && bitsEqual(g.levels, ref.levels);
+    results.push({code:item.code, blockLabel:item.blockLabel, index:i, bits, levels:g.levels, w:g.w, empty, maybeMissing});
+    if (onProgress && (i%15===0 || i===uniq.length-1)){
+      onProgress(i+1, uniq.length);
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }
+  const buf = buildGrayFile(W, H, curSpace(), results);
+  return {buf, plan: results, W, H, rowBytes: Math.ceil(W/2), glyphBytes: Math.ceil(W/2)*H, gray:true, space:curSpace()};
+}
+async function generateAll(onProgress){
+  if (curMode() === 'gray') return generateAllGray(onProgress);
+  const W=curW(), H=curH(), baseline=curBaseline(), fontPx=curFontPx(),
+        xNudge=curXNudge(), yNudge=curYNudge(), threshold=curThreshold(), weight=curWeight();
+  const rowBytes = Math.ceil(W/8), glyphBytes = rowBytes*H;
+  const plan = planGlyphs();
+  const buf = new Uint8Array(glyphBytes*plan.length);
+  // "maybe missing" flag: compare against a PUA codepoint that's essentially
+  // never defined — a heuristic, not 100% reliable.
+  const refBits = fontFamily ? await rasterizeChar(String.fromCodePoint(0xE000), W,H,baseline,fontPx,xNudge,yNudge,threshold,weight) : null;
+  const results = [];
+  for (let i=0;i<plan.length;i++){
+    const item = plan[i];
+    const ch = String.fromCodePoint(item.code);
+    const bits = await rasterizeChar(ch, W,H,baseline,fontPx,xNudge,yNudge,threshold,weight);
+    for (let y=0;y<H;y++) for (let x=0;x<W;x++) if (bits[y*W+x]){
+      buf[i*glyphBytes + y*rowBytes + (x>>3)] |= (1<<(7-(x&7)));
+    }
+    const empty = bits.every(v=>v===0);
+    const maybeMissing = !empty && bitsEqual(bits, refBits);
+    results.push({code:item.code, blockLabel:item.blockLabel, index:i, bits, empty, maybeMissing});
+    if (onProgress && (i%15===0 || i===plan.length-1)){
+      onProgress(i+1, plan.length);
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }
+  return {buf, plan: results, W, H, rowBytes, glyphBytes};
+}
+function setProgress(done, total){
+  const pct = total ? Math.round(done/total*100) : 0;
+  progressBar.style.display = pct >= 100 ? 'none' : 'block';
+  progressBar.value = pct;
+}
+
+function glyphChar(cp){
+  if (cp < 0x20) return '';
+  try { return String.fromCodePoint(cp); } catch(e){ return ''; }
+}
+async function buildPreview(){
+  if (!fontFamily){ alert('Сначала загрузите шрифт'); return; }
+  btnPreview.disabled = true; btnExport.disabled = true;
+  const result = await generateAll(setProgress);
+  grid.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  result.plan.forEach(item=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'thumb' + (item.maybeMissing ? ' warn' : '');
+    const c = document.createElement('canvas');
+    c.width = result.W; c.height = result.H;
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(result.W, result.H);
+    for (let y=0;y<result.H;y++) for (let x=0;x<result.W;x++){
+      const on = item.bits[y*result.W+x];
+      const o=(y*result.W+x)*4, p = result.gray ? grayRGB(item.levels[y*result.W+x]) : (on ? PIXEL_ON : PIXEL_OFF);
+      img.data[o]=p[0]; img.data[o+1]=p[1]; img.data[o+2]=p[2]; img.data[o+3]=255;
+    }
+    ctx.putImageData(img,0,0);
+    c.style.width = Math.round(result.W*zoom)+'px';
+    c.style.height = Math.round(result.H*zoom)+'px';
+    const lbl = document.createElement('div');
+    lbl.className = 'lbl';
+    const ch = glyphChar(item.code);
+    const numDiv = document.createElement('div');
+    numDiv.textContent = hex4(item.code);
+    lbl.appendChild(numDiv);
+    if (ch){
+      const chDiv = document.createElement('div');
+      chDiv.className = 'lbl-ch';
+      chDiv.textContent = ch;
+      lbl.appendChild(chDiv);
+    }
+    wrap.title = `${hex4(item.code)}  (#${item.index})` + (ch?`  '${ch}'`:'') + (item.maybeMissing?'  ⚠ возможно нет в шрифте':'');
+    wrap.appendChild(c);
+    wrap.appendChild(lbl);
+    frag.appendChild(wrap);
+  });
+  grid.appendChild(frag);
+  btnPreview.disabled = false; btnExport.disabled = false;
+  return result;
+}
+btnPreview.addEventListener('click', buildPreview);
+zoomRange.addEventListener('input', ()=>{
+  zoom = parseFloat(zoomRange.value);
+  grid.querySelectorAll('canvas').forEach(c=>{
+    c.style.width = Math.round(curW()*zoom)+'px';
+    c.style.height = Math.round(curH()*zoom)+'px';
+  });
+});
+
+btnExport.addEventListener('click', async ()=>{
+  if (!fontFamily){ alert('Сначала загрузите шрифт'); return; }
+  btnPreview.disabled = true; btnExport.disabled = true;
+  const result = await generateAll(setProgress);
+  const name = `${(nameInput.value||fontBaseName).trim()}.bin`;
+  const blob = new Blob([result.buf], {type:'application/octet-stream'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  btnPreview.disabled = false; btnExport.disabled = false;
+});
+
+renderBlockList();
+renderTestGlyph();
+updateFileName();
+
+// Opened from DGUS+ (/fonts/generator.html) the font can be saved straight into the open project's DWIN_SET under a font ID;
+// standalone /api/project doesn't answer and this block stays hidden.
+const dgusBox = document.getElementById('dgusBox');
+const dgusId = document.getElementById('dgusId');
+const dgusReplace = document.getElementById('dgusReplace');
+const dgusIds = document.getElementById('dgusIds');
+const dgusCheckEl = document.getElementById('dgusCheck');
+const dgusStatus = document.getElementById('dgusStatus');
+const btnSaveProject = document.getElementById('btnSaveProject');
+const BLOCK = 256*1024; // one font ID = one 256 KB flash block on T5L
+let dgusInfo = null;
+
+// [13,14,18,22,23,32,33] -> "13–14, 18, 22–23, 32–33"
+function compactIds(ids){
+  const s = [...ids].sort((a,b)=>a-b), out = [];
+  for (let i=0;i<s.length;i++){
+    let j = i;
+    while (j+1<s.length && s[j+1]===s[j]+1) j++;
+    out.push(i===j ? String(s[i]) : `${s[i]}–${s[j]}`);
+    i = j;
+  }
+  return out.join(', ');
+}
+async function dgusRefresh(){
+  if (!/^https?:$/.test(location.protocol)) return;
+  try {
+    const r = await fetch('/api/project', {cache:'no-store'});
+    if (!r.ok) return;
+    dgusInfo = await r.json();
+  } catch(e){ return; }
+  const fonts = (dgusInfo.files||[]).filter(f=>f.kind==='font');
+  const keep = dgusReplace.value;
+  dgusReplace.innerHTML = '<option value="">Новый шрифт</option>';
+  fonts.forEach(f=>{
+    const o = document.createElement('option');
+    o.value = f.name; o.dataset.id = f.id;
+    o.textContent = `${f.id} · ${f.name.replace(/^\d+_/, '').replace(/\.bin$/i, '')}`;
+    dgusReplace.appendChild(o);
+  });
+  dgusReplace.value = keep;
+  if (!dgusId.value){
+    const free = dgusInfo.freeIds || [];
+    dgusId.value = free.find(n=>n>=24) || free[0] || '';
+  }
+  dgusIds.textContent = `Свободно: ${compactIds(dgusInfo.freeIds || []) || 'нет'}`;
+  dgusBox.style.display = '';
+  dgusReady = true;
+  dgusCheck();
+}
+// Шрифт проекта как образец: размер ячейки, диапазоны и вес берём из имени файла
+// («18_Inter_Bold_64_64_ASCII_0000-007E_Cyrillic_0400-04FF.bin»), номер — из префикса.
+function fillFromProjectFont(file){
+  const stem = file.replace(/\.bin$/i, '').replace(/^\d+_/, '');
+  const re = /(?<!\d)(\d{1,3})\s*[_xX*]\s*(\d{1,3})(?!\d)/g;
+  let m, dims = null;
+  while ((m = re.exec(stem))){
+    const a = parseInt(m[1],10), b = parseInt(m[2],10);
+    if (a>=4 && a<=256 && b>=4 && b<=256){ dims = {w:a, h:b, at:m.index}; break; }
+    re.lastIndex = m.index + 1;
+  }
+  if (dims){ genW.value = dims.w; genH.value = dims.h; }
+  const list = [];
+  const rr = /([A-Za-z][A-Za-z0-9]*)_([0-9A-Fa-f]{1,6})-([0-9A-Fa-f]{1,6})/g;
+  while ((m = rr.exec(stem)))
+    list.push({label:m[1], start:m[2].toUpperCase().padStart(4,'0'), end:m[3].toUpperCase().padStart(4,'0')});
+  if (list.length){ blocks = list; renderBlockList(); }
+  const w = stem.match(/_wght(\d+)/);
+  if (w) genWeight.value = w[1];
+  genMode.value = /_Gray4(?:_|$)/i.test(stem) ? 'gray' : 'mono';
+  applyMode();
+  if (!fontFamily){
+    fontBaseName = (dims ? stem.slice(0, dims.at) : stem).replace(/_wght\d+/, '').replace(/_+$/, '') || 'font';
+    loadedStyleLabel = '';
+  }
+  renderTestGlyph();
+  updateFileName();
+}
+// Влезает ли шрифт: он займёт N подряд идущих номеров (по 256 КБ), начиная с выбранного.
+// Они не должны выходить за 127, попадать на зарезервированные и на номера других файлов
+// (иконки, картинки-медиа, соседние шрифты). Заменяемый шрифт свои номера освобождает.
+var dgusReady = false; // var: updateSummary зовёт проверку раньше, чем объявлены остальные const
+function dgusCheck(){
+  if (!dgusReady) return null;
+  const id = parseInt(dgusId.value, 10);
+  if (!(id >= 1 && id <= 127)){
+    dgusCheckEl.className = 'bad'; dgusCheckEl.textContent = 'Номер должен быть от 1 до 127';
+    return {ok:false};
+  }
+  const bytes = curMode() === 'gray'
+    ? grayFileSize(planGlyphs().filter(p=>p.code>0x20 && p.code<=0xFFFF).length, curW(), curH())
+    : planGlyphs().length * Math.ceil(curW()/8) * curH();
+  const need = Math.max(1, Math.ceil(bytes / BLOCK));
+  const last = id + need - 1;
+  const replace = dgusReplace.value;
+  const reserved = dgusInfo.reservedIds || [];
+  const targetName = `${id}_${(nameInput.value || fontBaseName).trim().replace(/^\d+_/, '')}.bin`; // тот же файл — просто перезапись
+  const problems = [];
+  if (last > 127) problems.push(`не хватает номеров: нужно до ${last}, максимум 127`);
+  for (let n = id; n <= Math.min(last, 127); n++){
+    if (reserved.includes(n)){ problems.push(`${n} зарезервирован DGUS`); continue; }
+    const u = (dgusInfo.usedIds || []).find(x=>x.id === n);
+    if (u && u.file !== replace && u.file !== targetName) problems.push(`${n} занят файлом ${u.file}`);
+  }
+  const span = need > 1 ? `${id}–${last}` : String(id);
+  const kb = Math.ceil(bytes / 1024);
+  if (problems.length){
+    dgusCheckEl.className = 'bad';
+    dgusCheckEl.textContent = `Не влезает: ${kb} КБ = ${need} бл. (${span}). ` + problems.join('; ') + '.';
+    return {ok:false, need, problems};
+  }
+  dgusCheckEl.className = 'ok';
+  dgusCheckEl.textContent = `Влезает: ${kb} КБ, номера ${span}`;
+  return {ok:true, need};
+}
+dgusId.addEventListener('input', dgusCheck);
+[genW, genH, nameInput].forEach(el=>el.addEventListener('input', dgusCheck));
+genMode.addEventListener('change', dgusCheck);
+dgusReplace.addEventListener('change', ()=>{
+  const o = dgusReplace.selectedOptions[0];
+  if (o && o.dataset.id){ dgusId.value = o.dataset.id; fillFromProjectFont(o.value); }
+  dgusCheck();
+});
+btnSaveProject.addEventListener('click', async ()=>{
+  if (!fontFamily){ alert('Сначала загрузите шрифт'); return; }
+  const id = parseInt(dgusId.value, 10);
+  if (!(id >= 1 && id <= 127)){ alert('Укажите номер шрифта 1–127'); return; }
+  const chk = dgusCheck();
+  if (chk && !chk.ok){
+    dgusStatus.style.color = 'var(--bad)';
+    dgusStatus.textContent = 'Не сохранено: шрифт не влезает, см. выше';
+    return;
+  }
+  dgusStatus.style.color = 'var(--muted)';
+  btnSaveProject.disabled = btnPreview.disabled = btnExport.disabled = true;
+  dgusStatus.style.color = 'var(--muted)';
+  dgusStatus.textContent = 'Генерация…';
+  try {
+    const result = await generateAll(setProgress);
+    const base = (nameInput.value || fontBaseName).trim().replace(/^\d+_/, '');
+    const name = `${id}_${base}.bin`;
+    let url = `/api/save?name=${encodeURIComponent(name)}`;
+    const replace = dgusReplace.value;
+    if (replace) url += `&overwrite=1&replace=${encodeURIComponent(replace)}`;
+    let r = await fetch(url, {method:'POST', body: result.buf});
+    if (r.status === 409){
+      if (!confirm(`${name} уже есть в проекте. Заменить?\nСтарая версия уйдёт в DgusPlus_backup.`)) { dgusStatus.textContent = ''; return; }
+      r = await fetch(url + '&overwrite=1', {method:'POST', body: result.buf});
+    }
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok){
+      dgusStatus.style.color = 'var(--bad)';
+      dgusStatus.textContent = 'Не сохранено: ' + (j.error || r.status);
+      return;
+    }
+    dgusStatus.style.color = 'var(--accent)';
+    dgusStatus.textContent = `Сохранено: ${j.saved}` + (j.backup ? ` · старая версия: ${j.backup}` : '');
+    dgusReplace.value = name;
+    await dgusRefresh();
+  } finally {
+    btnSaveProject.disabled = btnPreview.disabled = btnExport.disabled = false;
+  }
+});
+dgusRefresh();
+
+// generator.html#job=<id>: DGUS+ runs this page headless for the MCP tools generate_font /
+// preview_font. Parameters and the font file come from /api/job/<id>; the .bin, a preview
+// image and suspicious glyphs go back to /api/job/<id>/result. Same rasterizer as manual use.
+const JOB_ID = (location.hash.match(/job=([\w-]+)/) || [])[1];
+function toBase64(bytes){
+  let s = '';
+  for (let i=0; i<bytes.length; i+=0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i+0x8000));
+  return btoa(s);
+}
+// Preview: the sample line on top (baseline in red), then every glyph in a grid.
+// Glyphs that look absent from the font are drawn orange.
+function jobPreview(result, sample, baseline){
+  const W = result.W, H = result.H, sc = W < 16 ? 2 : 1, gap = 2;
+  const cols = Math.max(1, Math.floor(1600 / (W*sc + gap)));
+  const rows = Math.ceil(result.plan.length / cols);
+  const byCode = new Map(result.plan.map(it=>[it.code, it]));
+  const chars = [...(sample || '')];
+  const sampleH = chars.length ? H*sc + 3*gap : 0;
+  const c = document.createElement('canvas');
+  c.width = Math.min(4096, Math.max(cols*(W*sc + gap), chars.length*W*sc) + gap);
+  c.height = Math.min(8192, sampleH + rows*(H*sc + gap) + gap);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#111'; ctx.fillRect(0, 0, c.width, c.height);
+  function draw(it, x0, y0, bg){
+    ctx.fillStyle = bg; ctx.fillRect(x0, y0, W*sc, H*sc);
+    if (result.gray){
+      const on = it.maybeMissing ? [255,170,68] : [232,232,232];
+      const bgc = bg === '#111' ? [17,17,17] : [43,43,43];
+      for (let y=0; y<H; y++) for (let x=0; x<W; x++){
+        const l = it.levels[y*W+x]; if (!l) continue;
+        const t = l/15;
+        ctx.fillStyle = 'rgb(' + [0,1,2].map(i=>Math.round(bgc[i]+(on[i]-bgc[i])*t)).join(',') + ')';
+        ctx.fillRect(x0+x*sc, y0+y*sc, sc, sc);
+      }
+      return;
+    }
+    ctx.fillStyle = it.maybeMissing ? '#fa4' : '#e8e8e8';
+    for (let y=0; y<H; y++) for (let x=0; x<W; x++) if (it.bits[y*W+x]) ctx.fillRect(x0+x*sc, y0+y*sc, sc, sc);
+  }
+  // Серый шрифт пропорциональный: пробная строка идёт с шагом = ширина глифа из таблицы.
+  let penX = gap;
+  chars.forEach((ch, i)=>{
+    const it = byCode.get(ch.codePointAt(0));
+    if (result.gray){
+      if (ch === ' '){ penX += result.space*sc; return; }
+      if (it){ draw(it, penX, gap, '#111'); penX += it.w*sc; }
+      else { ctx.strokeStyle = '#f55'; ctx.strokeRect(penX + 0.5, gap + 0.5, W*sc - 1, H*sc - 1); penX += W*sc; }
+      return;
+    }
+    if (it) draw(it, gap + i*W*sc, gap, '#111');
+    else { ctx.strokeStyle = '#f55'; ctx.strokeRect(gap + i*W*sc + 0.5, gap + 0.5, W*sc - 1, H*sc - 1); }
+  });
+  if (chars.length){
+    ctx.fillStyle = 'rgba(255,85,85,0.7)';
+    ctx.fillRect(gap, gap + Math.round(baseline*sc), result.gray ? Math.max(penX - gap, W*sc) : chars.length*W*sc, 1);
+  }
+  result.plan.forEach((it, i)=>{
+    draw(it, gap + (i%cols)*(W*sc + gap), sampleH + gap + Math.floor(i/cols)*(H*sc + gap), '#2b2b2b');
+  });
+  return c.toDataURL('image/png').split(',')[1];
+}
+async function runJob(id){
+  const post = obj=>fetch(`/api/job/${id}/result`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(obj)});
+  try {
+    const p = await (await fetch(`/api/job/${id}`, {cache:'no-store'})).json();
+    const buf = await (await fetch(`/api/job/${id}/font`, {cache:'no-store'})).arrayBuffer();
+    const family = 'Job_' + id;
+    const face = new FontFace(family, buf);
+    await face.load();
+    document.fonts.add(face);
+    fontFamily = family; fontBuffer = buf; weightFaceCache.clear();
+    fontBaseName = p.fontName || 'font'; loadedStyleLabel = '';
+    genW.value = p.w; genH.value = p.h; genFontPx.value = p.fontSize; genBaseline.value = p.baseline;
+    genXNudge.value = p.xShift || 0; genYNudge.value = p.yShift || 0; genThreshold.value = p.threshold || 128;
+    if (p.weight) genWeight.value = p.weight;
+    genMode.value = p.mode === 'gray' ? 'gray' : 'mono';
+    if (p.gamma) genGamma.value = p.gamma;
+    genSpace.value = (p.space === undefined || p.space === null) ? '' : p.space;
+    applyMode();
+    blocks = p.ranges.map(r=>({label:r.label, start:r.start, end:r.end}));
+    renderBlockList();
+    await checkVariableWeight();
+    updateFileName();
+    const result = await generateAll(null);
+    const maybeMissing = [], empty = [], touchesEdge = [];
+    const W = result.W, H = result.H;
+    result.plan.forEach(it=>{
+      const hex = hex4(it.code);
+      if (it.maybeMissing){ maybeMissing.push(hex); return; }
+      if (it.empty){
+        if (it.code > 0x20 && !/\s/u.test(String.fromCodePoint(it.code))) empty.push(hex);
+        return;
+      }
+      // Ink in the top/bottom row or the right column usually means the glyph was cut off by
+      // the cell. The left column is where glyphs normally start (A, T, V…), so it only counts
+      // when the render point was shifted left.
+      const checkLeft = (p.xShift || 0) < 0;
+      let edge = false;
+      for (let x=0; x<W && !edge; x++) edge = it.bits[x] || it.bits[(H-1)*W + x];
+      for (let y=0; y<H && !edge; y++) edge = it.bits[y*W + W-1] || (checkLeft && it.bits[y*W]);
+      if (edge) touchesEdge.push(hex);
+    });
+    const cap = a=>a.length > 200 ? a.slice(0, 200).concat([`…+${a.length-200}`]) : a;
+    await post({ok:true, name: nameInput.value, glyphs: result.plan.length, bin: toBase64(result.buf),
+      variableWeight: weightField.style.display !== 'none',
+      maybeMissing: cap(maybeMissing), empty: cap(empty), touchesEdge: cap(touchesEdge),
+      preview: jobPreview(result, p.sample, curBaseline())});
+  } catch(e){
+    await post({ok:false, error: String((e && e.message) || e)});
+  }
+}
+if (JOB_ID) runJob(JOB_ID);
+</script>
+</body>
+</html>
