@@ -80,6 +80,7 @@ namespace DgusPlus
                         if (Cfg.McpEnabled && McpServer.Port == 0) McpServer.Start(port);
                         Language.Attach(f);
                         PlusTab.Attach(f);
+                        PlusTab.ExportImport(f);
                         FrameFix.Install(f);
                         QuietPopups.Install();
                         // Холст пересоздаётся при открытии проекта. Ловим его в момент добавления

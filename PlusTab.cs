@@ -69,6 +69,9 @@ namespace DgusPlus
             AddCheck(opts, "Center page", Plus.Cfg.CenterPage,
                 delegate(bool v) { Plus.Cfg.CenterPage = v; if (v) Plus.CenterPage(); });
 
+            AddCheck(opts, "Show Export/Import", Plus.Cfg.ShowExportImport,
+                delegate(bool v) { Plus.Cfg.ShowExportImport = v; ExportImport(Plus.MainForm); });
+
             AddSep(flow);
             Label tl = new Label();
             Loc.Bind(delegate(string s) { tl.Text = s; }, "Theme:");
@@ -134,6 +137,40 @@ namespace DgusPlus
                 redoBtn.Enabled = Undo.CanRedo;
             };
             t.Start();
+        }
+
+        static ToolTip exportTip;
+        static readonly System.Collections.Generic.Dictionary<Control, int> exportShift = new System.Collections.Generic.Dictionary<Control, int>();
+
+        // Кнопки «Экспорт»/«Импорт» (myButton7/8) прячем, остальные сдвигаем влево, чтобы не оставалось дыры.
+        public static void ExportImport(Form main)
+        {
+            Control exp = R.Get(main, "myButton7") as Control, imp = R.Get(main, "myButton8") as Control;
+            if (exp == null || imp == null || exp.Parent == null) return;
+            if (exportTip == null)
+            {
+                exportTip = new ToolTip();
+                Loc.Bind(delegate(string s) { exportTip.SetToolTip(exp, s); },
+                    "Writes the list of controls to TouchConfig.xls and DisplayConfig.xls in the project folder");
+                Loc.Bind(delegate(string s) { exportTip.SetToolTip(imp, s); },
+                    "Rebuilds ALL controls on all pages from those xls files; existing controls are erased");
+            }
+            bool hide = !Plus.Cfg.ShowExportImport;
+            int shift = 0;
+            foreach (Control c in exp.Parent.Controls)
+                if (c != exp && c != imp && c.Left > imp.Left && (shift == 0 || c.Left - imp.Right < shift)) shift = c.Left - exp.Left;
+            if (exp.Visible == !hide && (!hide || exportShift.Count > 0) && (hide || exportShift.Count == 0)) return;
+            exp.Visible = imp.Visible = !hide;
+            if (hide)
+            {
+                foreach (Control c in exp.Parent.Controls)
+                    if (c != exp && c != imp && c.Left > imp.Left) { exportShift[c] = shift; c.Left -= shift; }
+            }
+            else
+            {
+                foreach (System.Collections.Generic.KeyValuePair<Control, int> kv in exportShift) kv.Key.Left += kv.Value;
+                exportShift.Clear();
+            }
         }
 
         static Button AddButton(FlowLayoutPanel flow, string text, string tip, EventHandler click)

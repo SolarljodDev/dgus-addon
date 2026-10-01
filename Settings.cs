@@ -10,6 +10,7 @@ namespace DgusPlus
         public bool ClickToSelect = true;   // первый клик только выделяет, тащить можно уже выделенное
         public bool WheelZoom = true;       // колесо = зум, Ctrl+колесо = вертикальная прокрутка
         public bool ShowVpLabels = true;    // ", 5000" после подписи элемента на холсте
+        public bool ShowExportImport = false;   // кнопки «Экспорт»/«Импорт» на вкладке File: Импорт стирает все элементы
         public bool CenterPage = true;      // страница по центру рабочей области
         public string Theme = "dark";       // dark | light | original
         public bool McpEnabled = true;      // MCP-сервер для Claude Code на 127.0.0.1
@@ -38,6 +39,7 @@ namespace DgusPlus
                 s.WheelZoom = Bool(kv, "WheelZoom", s.WheelZoom);
                 s.ShowVpLabels = Bool(kv, "ShowVpLabels", s.ShowVpLabels);
                 s.CenterPage = Bool(kv, "CenterPage", s.CenterPage);
+                s.ShowExportImport = Bool(kv, "ShowExportImport", s.ShowExportImport);
                 if (kv.ContainsKey("Theme")) s.Theme = kv["Theme"];
                 s.McpEnabled = Bool(kv, "McpEnabled", s.McpEnabled);
                 int port;
@@ -59,6 +61,7 @@ namespace DgusPlus
                     "WheelZoom=" + WheelZoom,
                     "ShowVpLabels=" + ShowVpLabels,
                     "CenterPage=" + CenterPage,
+                    "ShowExportImport=" + ShowExportImport,
                     "Theme=" + Theme,
                     "McpEnabled=" + McpEnabled,
                     "McpPort=" + McpPort,
