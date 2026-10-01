@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.IO;
+using System.Reflection;
 using System.Windows.Forms;
 using BizDraw;
 using BizDraw.Controls;
@@ -24,6 +25,11 @@ namespace DgusPlus
         {
             Cfg = Settings.Load();
             Language.Prepare();
+            // Сохранённые страницы помнят имя сборки, которая их писала (DgusPlus, DgusPlus.new, …) — читаем любой из них.
+            AppDomain.CurrentDomain.AssemblyResolve += delegate(object s, ResolveEventArgs e)
+            {
+                return e.Name.StartsWith("DgusPlus") ? Assembly.GetExecutingAssembly() : null;
+            };
             Application.AddMessageFilter(new InputFilter());
             Application.Idle += FirstIdle;
         }

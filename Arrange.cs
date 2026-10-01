@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Reflection;
 using System.Windows.Forms;
 using BizDraw.Controls;
 using BizDraw.Core;
@@ -47,9 +48,28 @@ namespace DgusPlus
             {
                 hookedItems = doc.Items;
                 order.Clear();
-                doc.Items.SelectedObjectChanged += delegate { Guard(UpdateOrder); };
             }
+            if (legacyCompat == null) legacyCompat = delegate { Guard(UpdateOrder); };
+            foreach (PageRef p in Pages.All()) PurgeOwnHandlers(p.Doc);
             UpdateOrder();
+        }
+
+        // Метод этого делегата (<Poll>b__0) нужен BinaryFormatter, чтобы читать страницы, сохранённые сборкой 1.0.
+        static EventHandler legacyCompat;
+
+        // Подписки на события элементов DGUS попадают в сохранённый .tft (BinaryFormatter пишет делегаты),
+        // и файл перестаёт читаться другой сборкой. Сборка 1.0 подписывалась так (метод <Poll>b__0) —
+        // убираем такие обработчики из уже загруженных страниц, а сам метод ниже оставляем,
+        // чтобы проекты, сохранённые 1.0, по-прежнему открывались.
+        static void PurgeOwnHandlers(Document doc)
+        {
+            if (doc == null) return;
+            FieldInfo f = typeof(GraphicsList).GetField("SelectedObjectChanged",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Delegate all = f == null ? null : f.GetValue(doc.Items) as Delegate;
+            if (all == null) return;
+            foreach (Delegate d in all.GetInvocationList())
+                if (d.Method.DeclaringType == typeof(Arrange)) doc.Items.SelectedObjectChanged -= (EventHandler)d;
         }
 
         static void Guard(MethodInvoker a) { Plus.Guard(a); }
