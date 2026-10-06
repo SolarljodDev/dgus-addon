@@ -18,6 +18,8 @@ namespace DgusPlus
             { "Upload to display", "Залить в дисплей" }, { "Over UART, no SD card", "По UART, без SD-карты" },
             { "First click only selects", "Первый клик только выделяет" }, { "Wheel = zoom", "Колесо = масштаб" },
             { "VP in canvas labels", "VP в подписях на холсте" }, { "Center page", "Страница по центру" }, { "Show Export/Import", "Показывать Экспорт/Импорт" },
+            { "fonts", "шрифты" }, { "Font generator (TTF/OTF → .bin)", "Генератор шрифтов (TTF/OTF → .bin)" },
+            { "Font editor (.bin)", "Редактор шрифтов (.bin)" },
             { "Writes the list of controls to TouchConfig.xls and DisplayConfig.xls in the project folder",
               "Выгружает список элементов в TouchConfig.xls и DisplayConfig.xls в папке проекта" },
             { "Rebuilds ALL controls on all pages from TouchConfig.xls and DisplayConfig.xls (you pick the folder); existing controls are erased",

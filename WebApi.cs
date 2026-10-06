@@ -33,6 +33,15 @@ namespace DgusPlus
             {
                 if (method == "GET" && (path == "/" || path == "/fonts" || path == "/fonts/"))
                     return Html(IndexPage());
+                if (method == "GET" && path == "/api/lang")
+                    return Json("{\"lang\":\"" + (Loc.Russian ? "ru" : "en") + "\"}");
+                if (method == "GET" && path == "/fonts/i18n.js")
+                {
+                    Response js = new Response();
+                    js.Type = "application/javascript; charset=utf-8";
+                    js.Body = Resource("fonts.i18n.js") ?? new byte[0];
+                    return js;
+                }
                 if (method == "GET" && path == "/fonts/dgus.css")
                 {
                     Response css = new Response();
@@ -43,7 +52,7 @@ namespace DgusPlus
                 if (method == "GET" && path.StartsWith("/fonts/"))
                 {
                     byte[] page = Tool(path.Substring("/fonts/".Length));
-                    if (page == null) return Text(404, "Нет такой страницы.");
+                    if (page == null) return Text(404, "No such page.");
                     Response r = new Response();
                     r.Type = "text/html; charset=utf-8";
                     r.Body = page;
@@ -97,8 +106,19 @@ namespace DgusPlus
             string key = file == "editor.html" ? "editor" : file == "generator.html" ? "generator" : null;
             if (key == null) return null;
             string local = Path.Combine(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "fonts"), file);
-            if (File.Exists(local)) return File.ReadAllBytes(local);
-            using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("fonts." + key + ".html"))
+            byte[] page = File.Exists(local) ? File.ReadAllBytes(local) : Resource("fonts." + key + ".html");
+            if (page == null) return null;
+            // Язык инструментов — язык DGUS: i18n.js переводит русские страницы на английский.
+            string html = Encoding.UTF8.GetString(page);
+            string inject = "<script>window.DGUS_LANG='" + (Loc.Russian ? "ru" : "en") + "';</script><script src='/fonts/i18n.js'></script>";
+            int head = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
+            if (head >= 0) html = html.Insert(head, inject);
+            return Encoding.UTF8.GetBytes(html);
+        }
+
+        static byte[] Resource(string name)
+        {
+            using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream(name))
             {
                 if (s == null) return null;
                 byte[] b = new byte[s.Length];
@@ -141,12 +161,12 @@ namespace DgusPlus
 
         static string IndexPage()
         {
-            return "<!DOCTYPE html><html lang='ru'><head><meta charset='utf-8'><title>DGUS+ — шрифты</title>" +
+            return "<!DOCTYPE html><html lang='" + (Loc.Russian ? "ru" : "en") + "'><head><meta charset='utf-8'><title>DGUS+ — " + Loc.T("fonts") + "</title>" +
                    "<style>body{background:#1a1a1a;color:#ddd;font:14px Consolas,monospace;padding:40px}" +
                    "a{display:block;margin:12px 0;color:#4af;font-size:16px}</style></head><body>" +
-                   "<h2>DGUS+ — шрифты</h2>" +
-                   "<a href='/fonts/generator.html'>Генератор шрифтов (TTF/OTF → .bin)</a>" +
-                   "<a href='/fonts/editor.html'>Редактор шрифтов (.bin)</a></body></html>";
+                   "<h2>DGUS+ — " + Loc.T("fonts") + "</h2>" +
+                   "<a href='/fonts/generator.html'>" + Loc.T("Font generator (TTF/OTF → .bin)") + "</a>" +
+                   "<a href='/fonts/editor.html'>" + Loc.T("Font editor (.bin)") + "</a></body></html>";
         }
 
 

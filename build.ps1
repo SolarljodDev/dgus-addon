@@ -17,6 +17,7 @@ if (Test-Path "$FontEditor\index.html") {
     $res += "/resource:$FontEditor\index.html,fonts.editor.html"
     $res += "/resource:$FontEditor\font-generator.html,fonts.generator.html"
     $res += "/resource:$FontEditor\dgus.css,fonts.css"
+    $res += "/resource:$FontEditor\i18n.js,fonts.i18n.js"
 } else {
     Write-Warning "font-editor не найден ($FontEditor) — шрифтовые инструменты не будут встроены"
 }
