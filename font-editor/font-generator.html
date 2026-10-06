@@ -74,7 +74,7 @@
         <div><label>Сдвиг Y</label><input id="genYNudge" type="number" step="0.5" value="0" title="В отличие от DWIN-тула сдвигает точку рендера, а не готовый растр — низ у глифов со спусками не обрезается"></div>
       </div>
       <div class="row2">
-        <div><label>Тип</label><select id="genMode" title="Серый — 4 бита на пиксель (16 уровней), кодировка Unicode; выводится элементом Text II"><option value="mono">Чёрно-белый (1 бит)</option><option value="gray">Серый (4 бита)</option></select></div>
+        <div><label>Тип</label><select id="genMode" title="Серый 4 бита — 16 уровней, кодировка Unicode, выводится элементом Text II. Серый 8 бит — 256 уровней, формат шрифта №0 DWIN: только ASCII 0x21–0x7E, один размер ячейки, ширина символов фиксированная"><option value="mono">Чёрно-белый (1 бит)</option><option value="gray">Серый (4 бита)</option><option value="gray256">Серый (8 бит, 256 уровней)</option></select></div>
         <div id="thresholdField"><label>Порог</label><input id="genThreshold" type="number" min="0" max="255" value="128"></div>
         <div id="gammaField" style="display:none"><label>Гамма</label><input id="genGamma" type="number" min="0.3" max="3" step="0.1" value="1" title="Меньше 1 — текст плотнее, больше 1 — тоньше"></div>
       </div>
@@ -86,8 +86,9 @@
       <div id="testCanvasWrap"><canvas id="testCanvas" width="100" height="100"></canvas></div>
     </fieldset>
 
-    <fieldset>
+    <fieldset id="rangesSet">
       <legend>Диапазоны</legend>
+      <div id="rangesNote" style="display:none;font-size:12px;opacity:.75;margin:2px 0 6px">Серый 8 бит — шрифт №0 DWIN: только ASCII 0x21–0x7E (94 символа). Кириллицы и других диапазонов в этом формате нет.</div>
       <div id="blocksContainer"></div>
       <button id="btnAddBlock">+ Диапазон</button>
       <div id="summary"></div>
@@ -159,8 +160,8 @@ const genYNudge = document.getElementById('genYNudge');
 const genThreshold = document.getElementById('genThreshold');
 const genWeight = document.getElementById('genWeight');
 const genMode = document.getElementById('genMode');
-// generator.html?mode=gray (link in DGUS) opens with the 4-bit mode on; the first automatic font pick must not switch it back.
-let keepGray = /[?&]mode=gray/.test(location.search);
+// generator.html?mode=gray|gray256 (link in DGUS) opens with that gray mode on; the first automatic font pick must not switch it back.
+let keepMode = (location.search.match(/[?&]mode=(gray256|gray)(?![\w])/) || [])[1] || '';
 const genGamma = document.getElementById('genGamma');
 const genSpace = document.getElementById('genSpace');
 const thresholdField = document.getElementById('thresholdField');
@@ -171,6 +172,7 @@ const testCanvas = document.getElementById('testCanvas');
 const weightField = document.getElementById('weightField');
 
 const blocksContainer = document.getElementById('blocksContainer');
+const rangesNote = document.getElementById('rangesNote');
 const btnAddBlock = document.getElementById('btnAddBlock');
 const summaryEl = document.getElementById('summary');
 
@@ -188,9 +190,15 @@ function curBaseline(){ return Math.max(0, parseFloat(genBaseline.value)||0); }
 function curXNudge(){ return parseFloat(genXNudge.value)||0; }
 function curYNudge(){ return parseFloat(genYNudge.value)||0; }
 function curThreshold(){ return Math.min(255, Math.max(0, parseInt(genThreshold.value,10)||128)); }
-function curMode(){ return genMode.value === 'gray' ? 'gray' : 'mono'; }
+function curMode(){ return genMode.value === 'gray' || genMode.value === 'gray256' ? genMode.value : 'mono'; }
+function isGray(){ return curMode() !== 'mono'; }
+function curMax(){ return curMode() === 'gray256' ? 255 : 15; } // верхний уровень серого: 4 бита — 15, 8 бит — 255
 function curGamma(){ return Math.min(3, Math.max(0.3, parseFloat(genGamma.value)||1)); }
-function curSpace(){ const v = parseInt(genSpace.value,10); return isNaN(v) ? Math.round(curFontPx()/3) : Math.min(255, Math.max(0, v)); }
+function curSpace(){
+  const v = parseInt(genSpace.value,10);
+  if (isNaN(v)) return curMode() === 'gray256' ? gray256PadW(curW()) : Math.round(curFontPx()/3); // 8 бит: пробел как у DWIN — ширина ячейки
+  return Math.min(255, Math.max(0, v));
+}
 function curWeight(){ return Math.min(1000, Math.max(1, parseInt(genWeight.value,10)||400)); }
 function updateFileName(){
   const rangeParts = blocks.map(b=>{
@@ -200,7 +208,7 @@ function updateFileName(){
     return `${label}_${b.start.toUpperCase()}-${b.end.toUpperCase()}`;
   }).filter(Boolean).join('_');
   const weightPart = (weightField.style.display !== 'none') ? `_wght${curWeight()}` : (loadedStyleLabel ? `_${loadedStyleLabel}` : '');
-  nameInput.value = `${fontBaseName}${weightPart}_${curW()}_${curH()}` + (rangeParts ? `_${rangeParts}` : '') + (curMode()==='gray' ? '_Gray4' : '');
+  nameInput.value = `${fontBaseName}${weightPart}_${curW()}_${curH()}` + (rangeParts && curMode() !== 'gray256' ? `_${rangeParts}` : '') + (curMode()==='gray' ? '_Gray4' : curMode()==='gray256' ? '_Gray8' : '');
 }
 
 async function loadFontFile(file){
@@ -336,9 +344,10 @@ async function rasterizeChar(ch, W, H, baseline, fontPx, xNudge, yNudge, thresho
   }
   return bits;
 }
-// Серый режим: 16 уровней покрытия (среднее по SS×SS подпикселям), глиф прижат к левому краю
-// ячейки, ширина — по метрике шрифта (шрифт пропорциональный: DWIN двигает курсор на эту ширину).
-async function rasterizeGray(ch, W, H, baseline, fontPx, xNudge, yNudge, weight, gamma){
+// Серый режим: 16 уровней покрытия (среднее по SS×SS подпикселям; maxLevel=255 — 256 уровней), глиф прижат к левому
+// краю ячейки, ширина — по метрике шрифта (шрифт пропорциональный: DWIN двигает курсор на эту ширину).
+async function rasterizeGray(ch, W, H, baseline, fontPx, xNudge, yNudge, weight, gamma, maxLevel){
+  maxLevel = maxLevel || 15;
   const family = await getFamilyForWeight(weight||400);
   const cw = W*SS, chh = H*SS;
   const c = document.createElement('canvas');
@@ -360,7 +369,7 @@ async function rasterizeGray(ch, W, H, baseline, fontPx, xNudge, yNudge, weight,
       let sum=0;
       for (let sy=0; sy<SS; sy++) for (let sx=0; sx<SS; sx++) sum += data[((ty*SS+sy)*cw + (tx*SS+sx))*4 + 3];
       const a = Math.pow(sum/(SS*SS)/255, gamma);
-      const lv = Math.max(0, Math.min(15, Math.round(a*15)));
+      const lv = Math.max(0, Math.min(maxLevel, Math.round(a*maxLevel)));
       levels[ty*W+tx] = lv;
       if (lv && tx+1 > inkR) inkR = tx+1;
     }
@@ -404,6 +413,53 @@ function buildGrayFile(W, H, space, items){
   const c = crc16modbus(f.subarray(8)); f[6]=c&255; f[7]=c>>8;
   return f;
 }
+// Файл «серого 256» (8 бит на пиксель) — формат шрифта №0 DWIN (ASCII font tool, Font0_16.exe, тип «256 bit»),
+// снят с его файлов. Тот же контейнер "DGUS_2", но таблица не Unicode, а ASCII, и размеры лежат в слотах:
+//   0x000  "DGUS_2", CRC16/MODBUS (LE) по байтам с 0x08 до конца, размер файла − 8 (4 байта BE),
+//          0x02 (шрифт №0), число размеров (1), 0x01 (8 бит; у «16 bit» — 0), 0x00
+//   0x020  слоты размеров по 8 байт: слот (индекс−4), индекс = ширина W (4…128):
+//          0x5A, W чётная, H (до 255), 0x01, адрес секции (4 байта BE)
+//   0x800  секция размера: 0x500 байт заголовка и таблицы, дальше 94 ячейки для кодов 0x21…0x7E
+//          +0x32 — байт, зависящий от W (G8_B32), +0x33 = 0x20, +0x42 = 0x10
+//          +0x0A0 таблица на 95 кодов 0x20…0x7E, 5 байт: ширина шага, 0xF0 (у пробела 0x30), адрес глифа (3 байта BE, от начала файла)
+//   +0x500 глифы подряд; ячейка = W чётная × H байт, один байт на пиксель (0 — фон, 255 — полные «чернила»)
+// Шаг у всех символов — ширина ячейки (шрифт моноширинный, как у DWIN).
+const G8_HDR = 0x800, G8_SEC = 0x500, G8_CHARS = 94, G8_MAXW = 128, G8_MAXH = 255;
+// Значение байта +0x32 по ширине W: [последняя W диапазона, значение]. Закономерность неясна, взято из файлов DWIN для W=4…64.
+const G8_B32 = [[8,5],[15,10],[16,12],[26,20],[29,30],[33,25],[42,40],[47,50],[52,36],[55,50],[60,36],[61,50],[62,48],[63,50],[64,48]];
+function gray256B32(W){ for (const [last, v] of G8_B32) if (W <= last) return v; return 48; }
+function gray256PadW(W){ return W + (W & 1); }
+function gray256Size(W, H){ return G8_HDR + G8_SEC + G8_CHARS * gray256PadW(W) * H; }
+function gray256Problem(){
+  const W = curW(), H = curH();
+  if (W > G8_MAXW || H > G8_MAXH) return `8-битный шрифт: ширина до ${G8_MAXW}, высота до ${G8_MAXH} (у вас ${W}×${H})`;
+  return null;
+}
+function buildGray256File(W, H, space, items){
+  const padW = gray256PadW(W), cell = padW*H, S = G8_HDR, data0 = S + G8_SEC;
+  const total = gray256Size(W, H);
+  const f = new Uint8Array(total);
+  'DGUS_2'.split('').forEach((ch,i)=>f[i] = ch.charCodeAt(0));
+  const rest = total - 8;
+  f[8]=rest>>>24; f[9]=(rest>>16)&255; f[10]=(rest>>8)&255; f[11]=rest&255;
+  f[0x0c]=2; f[0x0d]=1; f[0x0e]=1; f[0x0f]=0;
+  const slot = 0x20 + (Math.min(W, G8_MAXW) - 4) * 8;
+  f[slot]=0x5A; f[slot+1]=padW; f[slot+2]=H; f[slot+3]=1;
+  f[slot+4]=S>>>24; f[slot+5]=(S>>16)&255; f[slot+6]=(S>>8)&255; f[slot+7]=S&255;
+  f[S+0x32] = gray256B32(W); f[S+0x33] = 0x20; f[S+0x42] = 0x10;
+  const t0 = S + 0xA0;
+  f[t0]=space; f[t0+1]=0x30;
+  for (let code=0x21, i=0; code<=0x7E; code++, i++){
+    const o = t0 + (code-0x20)*5, off = data0 + i*cell;
+    f[o]=padW; f[o+1]=0xF0; f[o+2]=off>>16; f[o+3]=(off>>8)&255; f[o+4]=off&255;
+  }
+  items.forEach(it=>{
+    const off = data0 + (it.code-0x21)*cell;
+    for (let y=0;y<H;y++) for (let x=0;x<W;x++) f[off + y*padW + x] = it.levels[y*W+x];
+  });
+  const c = crc16modbus(f.subarray(8)); f[6]=c&255; f[7]=c>>8;
+  return f;
+}
 function bitsEqual(a,b){
   if (!a || !b || a.length!==b.length) return false;
   for (let i=0;i<a.length;i++) if (a[i]!==b[i]) return false;
@@ -424,11 +480,11 @@ async function checkVariableWeight(){
 
 const T_MARGIN = 14;
 // Цвет серого пикселя между фоном и «чернилами» темы (level 0…15).
-function grayRGB(level){
-  const t = level/15;
+function grayRGB(level, max){
+  const t = level/(max || 15);
   return PIXEL_OFF.map((o,i)=>Math.round(o + (PIXEL_ON[i]-o)*t));
 }
-function grayCss(level){ const c = grayRGB(level); return `rgb(${c[0]},${c[1]},${c[2]})`; }
+function grayCss(level, max){ const c = grayRGB(level, max); return `rgb(${c[0]},${c[1]},${c[2]})`; }
 async function renderTestGlyph(){
   const W = curW(), H = curH();
   const availW = document.getElementById('testCanvasWrap').clientWidth || 300;
@@ -441,16 +497,17 @@ async function renderTestGlyph(){
   if (!fontFamily) return;
   const baseline = curBaseline();
   const tch = testChar.value.slice(0,1)||'A';
-  const gray = curMode() === 'gray';
-  const gl = gray ? await rasterizeGray(tch, W, H, baseline, curFontPx(), curXNudge(), curYNudge(), curWeight(), curGamma()) : null;
+  const gray = isGray(), max = curMax();
+  const gl = gray ? await rasterizeGray(tch, W, H, baseline, curFontPx(), curXNudge(), curYNudge(), curWeight(), curGamma(), max) : null;
   const bits = gray ? null : await rasterizeChar(tch, W, H, baseline, curFontPx(), curXNudge(), curYNudge(), curThreshold(), curWeight());
   for (let y=0;y<H;y++) for (let x=0;x<W;x++){
-    ctx.fillStyle = gray ? grayCss(gl.levels[y*W+x]) : (bits[y*W+x] ? PON_CSS : POFF_CSS);
+    ctx.fillStyle = gray ? grayCss(gl.levels[y*W+x], max) : (bits[y*W+x] ? PON_CSS : POFF_CSS);
     ctx.fillRect(T_MARGIN+x*cell, T_MARGIN+y*cell, cell, cell);
   }
   if (gray){
+    const adv = curMode() === 'gray256' ? gray256PadW(W) : gl.w; // 8 бит: шаг всегда равен ширине ячейки
     ctx.strokeStyle = '#4da3ff'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(T_MARGIN+gl.w*cell+0.5, T_MARGIN); ctx.lineTo(T_MARGIN+gl.w*cell+0.5, T_MARGIN+H*cell); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(T_MARGIN+adv*cell+0.5, T_MARGIN); ctx.lineTo(T_MARGIN+adv*cell+0.5, T_MARGIN+H*cell); ctx.stroke();
   }
   ctx.strokeStyle = '#ff5555';
   ctx.lineWidth = 1.5;
@@ -461,11 +518,17 @@ async function renderTestGlyph(){
   el.addEventListener('input', renderTestGlyph);
 });
 [genW,genH,genWeight].forEach(el=>el.addEventListener('input', updateFileName));
+[genW,genH].forEach(el=>el.addEventListener('input', ()=>{ if (curMode() === 'gray256') updateSummary(); }));
 function applyMode(){
-  const g = curMode() === 'gray';
+  const g = isGray();
   thresholdField.style.display = g ? 'none' : '';
   gammaField.style.display = g ? '' : 'none';
   spaceField.style.display = g ? '' : 'none';
+  const only8 = curMode() === 'gray256';
+  rangesNote.style.display = only8 ? '' : 'none';
+  blocksContainer.style.display = btnAddBlock.style.display = only8 ? 'none' : '';
+  genSpace.placeholder = curMode() === 'gray256' ? 'ширина ячейки' : 'авто';
+  genSpace.title = curMode() === 'gray256' ? 'Ширина пробела; пусто — ширина ячейки (как у DWIN)' : 'Ширина пробела; пусто — треть размера шрифта';
   updateFileName(); updateSummary(); renderTestGlyph();
 }
 genMode.addEventListener('change', applyMode);
@@ -501,6 +564,10 @@ btnAddBlock.addEventListener('click', ()=>{
 
 function planGlyphs(){
   const plan = [];
+  if (curMode() === 'gray256'){ // формат шрифта №0: диапазоны не выбираются, всегда ASCII 0x21–0x7E
+    for (let cp=0x21; cp<=0x7E; cp++) plan.push({code:cp, blockLabel:'ASCII'});
+    return plan;
+  }
   blocks.forEach(b=>{
     const s = parseInt(b.start,16), e = parseInt(b.end,16);
     if (isNaN(s) || isNaN(e) || e<s) return;
@@ -514,7 +581,13 @@ function updateSummary(){
   const glyphBytes = rowBytes*curH();
   const gray = curMode() === 'gray';
   const nGray = plan.filter(p=>p.code>0x20 && p.code<=0xFFFF).length;
-  summaryEl.textContent = gray
+  if (curMode() === 'gray256'){
+    const nAscii = new Set(plan.filter(p=>p.code>=0x21 && p.code<=0x7E).map(p=>p.code)).size;
+    const skipped = new Set(plan.filter(p=>p.code>0x7E || p.code<0x20).map(p=>p.code)).size;
+    summaryEl.textContent = `Глифов: ${nAscii} из 94 ASCII · Файл: ${gray256Size(curW(), curH())} байт (заголовок 2 КБ + 94 ячейки)`
+      + (skipped ? ` · вне ASCII (${skipped} шт) в этот формат не попадают` : '')
+      + (gray256Problem() ? ` · ⚠ ${gray256Problem()}` : '');
+  } else summaryEl.textContent = gray
     ? `Глифов: ${nGray} · Файл: ${grayFileSize(nGray, curW(), curH())} байт (таблица Unicode 320 КБ + глифы)`
     : `Глифов: ${plan.length} · Файл: ${plan.length*glyphBytes} байт`;
   updateFileName();
@@ -530,28 +603,33 @@ function updateSummary(){
 async function generateAllGray(onProgress){
   const W=curW(), H=curH(), baseline=curBaseline(), fontPx=curFontPx(),
         xNudge=curXNudge(), yNudge=curYNudge(), weight=curWeight(), gamma=curGamma();
+  const g8 = curMode() === 'gray256', max = curMax();
+  if (g8 && gray256Problem()) throw new Error(gray256Problem());
   // В таблице серого шрифта есть только коды 0x21…0xFFFF: пробел — отдельная запись, ниже 0x20 нет ничего.
-  const plan = planGlyphs().filter(p=>p.code>0x20 && p.code<=0xFFFF);
+  // 8-битный формат (шрифт №0) — только ASCII 0x21…0x7E.
+  const plan = planGlyphs().filter(p=>g8 ? (p.code>=0x21 && p.code<=0x7E) : (p.code>0x20 && p.code<=0xFFFF));
   const seen = new Set(), uniq = plan.filter(p=>!seen.has(p.code) && seen.add(p.code));
-  const ref = fontFamily ? await rasterizeGray(String.fromCodePoint(0xE000), W,H,baseline,fontPx,xNudge,yNudge,weight,gamma) : null;
+  const ref = fontFamily ? await rasterizeGray(String.fromCodePoint(0xE000), W,H,baseline,fontPx,xNudge,yNudge,weight,gamma,max) : null;
+  const padW = gray256PadW(W);
   const results = [];
   for (let i=0;i<uniq.length;i++){
     const item = uniq[i];
-    const g = await rasterizeGray(String.fromCodePoint(item.code), W,H,baseline,fontPx,xNudge,yNudge,weight,gamma);
+    const g = await rasterizeGray(String.fromCodePoint(item.code), W,H,baseline,fontPx,xNudge,yNudge,weight,gamma,max);
     const bits = g.levels.map(v=>v?1:0);
     const empty = bits.every(v=>v===0);
     const maybeMissing = !empty && ref && bitsEqual(g.levels, ref.levels);
-    results.push({code:item.code, blockLabel:item.blockLabel, index:i, bits, levels:g.levels, w:g.w, empty, maybeMissing});
+    results.push({code:item.code, blockLabel:item.blockLabel, index:i, bits, levels:g.levels, w:g8 ? padW : g.w, empty, maybeMissing});
     if (onProgress && (i%15===0 || i===uniq.length-1)){
       onProgress(i+1, uniq.length);
       await new Promise(r=>setTimeout(r,0));
     }
   }
-  const buf = buildGrayFile(W, H, curSpace(), results);
-  return {buf, plan: results, W, H, rowBytes: Math.ceil(W/2), glyphBytes: Math.ceil(W/2)*H, gray:true, space:curSpace()};
+  const buf = g8 ? buildGray256File(W, H, curSpace(), results) : buildGrayFile(W, H, curSpace(), results);
+  const rowBytes = g8 ? padW : Math.ceil(W/2);
+  return {buf, plan: results, W, H, rowBytes, glyphBytes: rowBytes*H, gray:true, max, space:curSpace()};
 }
 async function generateAll(onProgress){
-  if (curMode() === 'gray') return generateAllGray(onProgress);
+  if (isGray()) return generateAllGray(onProgress);
   const W=curW(), H=curH(), baseline=curBaseline(), fontPx=curFontPx(),
         xNudge=curXNudge(), yNudge=curYNudge(), threshold=curThreshold(), weight=curWeight();
   const rowBytes = Math.ceil(W/8), glyphBytes = rowBytes*H;
@@ -588,8 +666,10 @@ function glyphChar(cp){
   if (cp < 0x20) return '';
   try { return String.fromCodePoint(cp); } catch(e){ return ''; }
 }
+function modeProblem(){ return curMode() === 'gray256' ? gray256Problem() : null; }
 async function buildPreview(){
   if (!fontFamily){ alert('Сначала загрузите шрифт'); return; }
+  if (modeProblem()){ alert(modeProblem()); return; }
   btnPreview.disabled = true; btnExport.disabled = true;
   const result = await generateAll(setProgress);
   grid.innerHTML = '';
@@ -603,7 +683,7 @@ async function buildPreview(){
     const img = ctx.createImageData(result.W, result.H);
     for (let y=0;y<result.H;y++) for (let x=0;x<result.W;x++){
       const on = item.bits[y*result.W+x];
-      const o=(y*result.W+x)*4, p = result.gray ? grayRGB(item.levels[y*result.W+x]) : (on ? PIXEL_ON : PIXEL_OFF);
+      const o=(y*result.W+x)*4, p = result.gray ? grayRGB(item.levels[y*result.W+x], result.max) : (on ? PIXEL_ON : PIXEL_OFF);
       img.data[o]=p[0]; img.data[o+1]=p[1]; img.data[o+2]=p[2]; img.data[o+3]=255;
     }
     ctx.putImageData(img,0,0);
@@ -641,6 +721,7 @@ zoomRange.addEventListener('input', ()=>{
 
 btnExport.addEventListener('click', async ()=>{
   if (!fontFamily){ alert('Сначала загрузите шрифт'); return; }
+  if (modeProblem()){ alert(modeProblem()); return; }
   btnPreview.disabled = true; btnExport.disabled = true;
   const result = await generateAll(setProgress);
   const name = `${(nameInput.value||fontBaseName).trim()}.bin`;
@@ -725,8 +806,8 @@ function fillFromProjectFont(file){
   if (list.length){ blocks = list; renderBlockList(); }
   const w = stem.match(/_wght(\d+)/);
   if (w) genWeight.value = w[1];
-  genMode.value = keepGray || /_Gray4(?:_|$)/i.test(stem) ? 'gray' : 'mono';
-  keepGray = false;
+  genMode.value = keepMode || (/_Gray8(?:_|$)/i.test(stem) ? 'gray256' : /_Gray4(?:_|$)/i.test(stem) ? 'gray' : 'mono');
+  keepMode = '';
   applyMode();
   if (!fontFamily){
     fontBaseName = (dims ? stem.slice(0, dims.at) : stem).replace(/_wght\d+/, '').replace(/_+$/, '') || 'font';
@@ -746,7 +827,9 @@ function dgusCheck(){
     dgusCheckEl.className = 'bad'; dgusCheckEl.textContent = 'Номер должен быть от 1 до 127';
     return {ok:false};
   }
-  const bytes = curMode() === 'gray'
+  const bytes = curMode() === 'gray256'
+    ? gray256Size(curW(), curH())
+    : curMode() === 'gray'
     ? grayFileSize(planGlyphs().filter(p=>p.code>0x20 && p.code<=0xFFFF).length, curW(), curH())
     : planGlyphs().length * Math.ceil(curW()/8) * curH();
   const need = Math.max(1, Math.ceil(bytes / BLOCK));
@@ -784,6 +867,7 @@ btnSaveProject.addEventListener('click', async ()=>{
   if (!fontFamily){ alert('Сначала загрузите шрифт'); return; }
   const id = parseInt(dgusId.value, 10);
   if (!(id >= 1 && id <= 127)){ alert('Укажите номер шрифта 1–127'); return; }
+  if (modeProblem()){ alert(modeProblem()); return; }
   const chk = dgusCheck();
   if (chk && !chk.ok){
     dgusStatus.style.color = 'var(--bad)';
@@ -852,7 +936,7 @@ function jobPreview(result, sample, baseline){
       const bgc = bg === '#111' ? [17,17,17] : [43,43,43];
       for (let y=0; y<H; y++) for (let x=0; x<W; x++){
         const l = it.levels[y*W+x]; if (!l) continue;
-        const t = l/15;
+        const t = l/(result.max || 15);
         ctx.fillStyle = 'rgb(' + [0,1,2].map(i=>Math.round(bgc[i]+(on[i]-bgc[i])*t)).join(',') + ')';
         ctx.fillRect(x0+x*sc, y0+y*sc, sc, sc);
       }
@@ -897,7 +981,7 @@ async function runJob(id){
     genW.value = p.w; genH.value = p.h; genFontPx.value = p.fontSize; genBaseline.value = p.baseline;
     genXNudge.value = p.xShift || 0; genYNudge.value = p.yShift || 0; genThreshold.value = p.threshold || 128;
     if (p.weight) genWeight.value = p.weight;
-    genMode.value = p.mode === 'gray' ? 'gray' : 'mono';
+    genMode.value = p.mode === 'gray' || p.mode === 'gray256' ? p.mode : 'mono';
     if (p.gamma) genGamma.value = p.gamma;
     genSpace.value = (p.space === undefined || p.space === null) ? '' : p.space;
     applyMode();
@@ -933,7 +1017,7 @@ async function runJob(id){
     await post({ok:false, error: String((e && e.message) || e)});
   }
 }
-if (keepGray){ genMode.value = 'gray'; genMode.dispatchEvent(new Event('change')); }
+if (keepMode){ genMode.value = keepMode; genMode.dispatchEvent(new Event('change')); }
 if (JOB_ID) runJob(JOB_ID);
 </script>
 </body>

@@ -18,7 +18,8 @@ namespace DgusPlus
         {
             public string Name, Kind;
             public int Id = -1, Blocks, W, H;
-            public bool Gray;   // серый 4-бит шрифт (заголовок «DGUS_2»), размеры и диапазоны — из самого файла
+            public bool Gray;   // серый шрифт (заголовок «DGUS_2»), размеры и диапазоны — из самого файла
+            public int GrayBits;   // 4 (16 уровней) или 8 (256 уровней, шрифт №0)
             public long Size;
             public List<string[]> Ranges = new List<string[]>();   // {метка, начало, конец}
         }
@@ -110,8 +111,19 @@ namespace DgusPlus
                 using (FileStream fs = File.OpenRead(path)) n = fs.Read(b, 0, b.Length);
                 if (n < 0x1A0 || b[0] != 'D' || b[1] != 'G' || b[2] != 'U' || b[3] != 'S' || b[4] != '_' || b[5] != '2') return;
                 f.Gray = true;
-                f.W = b[0x14]; f.H = b[0x15];
+                f.GrayBits = 4;
                 f.Ranges.Clear();
+                if (b[0x0c] == 2)
+                {
+                    // Шрифт №0 DWIN (ASCII font tool): слоты размеров с 0x20, по 8 байт, индекс слота = ширина − 4;
+                    // байт 0x0E: 1 — 256 уровней (8 бит), 0 — 16 уровней.
+                    f.GrayBits = b[0x0e] == 1 ? 8 : 4;
+                    for (int s = 0; s < 0x7E0 / 8 && 0x20 + s * 8 + 8 <= n; s++)
+                        if (b[0x20 + s * 8] == 0x5A) { f.W = s + 4; f.H = b[0x20 + s * 8 + 2]; break; }
+                    f.Ranges.Add(new string[] { "ASCII", "0020", "007E" });
+                    return;
+                }
+                f.W = b[0x14]; f.H = b[0x15];
                 int start = -1;
                 int recs = Math.Min(65504, (n - 0x1A0) / 5);
                 for (int i = 0; i <= recs; i++)
@@ -206,7 +218,7 @@ namespace DgusPlus
                 if (f.Id >= 0) d["id"] = f.Id;
                 if (f.Kind != "page") d["blocks"] = f.Blocks;
                 if (f.W > 0) { d["w"] = f.W; d["h"] = f.H; }
-                if (f.Gray) d["gray"] = true;
+                if (f.Gray) { d["gray"] = true; d["bits"] = f.GrayBits; }
                 if (f.Ranges.Count > 0)
                 {
                     List<object> rs = new List<object>();

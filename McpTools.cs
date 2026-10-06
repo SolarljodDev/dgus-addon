@@ -106,9 +106,9 @@ namespace DgusPlus
                 "\"baseline\":{\"type\":\"number\",\"description\":\"Базовая линия — строка от верха ячейки; по умолчанию 0.8·h\"}," +
                 "\"x_shift\":{\"type\":\"number\"},\"y_shift\":{\"type\":\"number\"}," +
                 "\"threshold\":{\"type\":\"integer\",\"description\":\"Порог 0–255, по умолчанию 128 (только для mode=mono)\"}," +
-                "\"mode\":{\"type\":\"string\",\"enum\":[\"mono\",\"gray\"],\"description\":\"mono — чёрно-белый 1 бит (по умолчанию); gray — серый 4 бита, 16 уровней, Unicode-таблица (~320 КБ) + глифы; такой шрифт выводит элемент Text II (тип 122) с настоящими кодами Unicode, ширина глифов пропорциональная\"}," +
-                "\"gamma\":{\"type\":\"number\",\"description\":\"Только для mode=gray: 0.3–3, по умолчанию 1; меньше — текст плотнее, больше — тоньше\"}," +
-                "\"space\":{\"type\":\"integer\",\"description\":\"Только для mode=gray: ширина пробела, px; по умолчанию треть кегля\"}," +
+                "\"mode\":{\"type\":\"string\",\"enum\":[\"mono\",\"gray\",\"gray256\"],\"description\":\"mono — чёрно-белый 1 бит (по умолчанию); gray — серый 4 бита, 16 уровней, Unicode-таблица (~320 КБ) + глифы; такой шрифт выводит элемент Text II (тип 122) с настоящими кодами Unicode, ширина глифов пропорциональная; gray256 — серый 8 бит, 256 уровней, формат шрифта №0 DWIN: только ASCII 0x21–0x7E, один размер w×h (w до 128, h до 255), ширина символов фиксированная = ширина ячейки\"}," +
+                "\"gamma\":{\"type\":\"number\",\"description\":\"Только для mode=gray и gray256: 0.3–3, по умолчанию 1; меньше — текст плотнее, больше — тоньше\"}," +
+                "\"space\":{\"type\":\"integer\",\"description\":\"Только для mode=gray и gray256: ширина пробела, px; по умолчанию треть кегля (gray256 — ширина ячейки)\"}," +
                 "\"weight\":{\"type\":\"integer\",\"description\":\"Вес 1–1000 для вариативных шрифтов (400 Regular, 700 Bold)\"}," +
                 "\"ranges\":{\"type\":\"array\",\"description\":\"Диапазоны по порядку: \\\"ascii\\\", \\\"cyrillic\\\" (0400–04FF), \\\"cyrillic-basic\\\" (0401, 0410–044F, 0451), \\\"latin1\\\", \\\"digits\\\", \\\"0020-007E\\\" или {label,start,end}. По умолчанию [\\\"ascii\\\"]\",\"items\":{}}," +
                 "\"sample\":{\"type\":\"string\",\"description\":\"Строка для превью\"}";
@@ -886,7 +886,7 @@ namespace DgusPlus
             p["yShift"] = a.Dbl("y_shift", 0);
             p["threshold"] = a.Int("threshold", 128);
             string mode = (a.Str("mode") ?? "mono").ToLowerInvariant();
-            if (mode != "mono" && mode != "gray") throw new ArgumentException("mode: mono или gray.");
+            if (mode != "mono" && mode != "gray" && mode != "gray256") throw new ArgumentException("mode: mono, gray или gray256.");
             p["mode"] = mode;
             if (a.Has("gamma")) p["gamma"] = a.Dbl("gamma", 1);
             if (a.Has("space")) p["space"] = a.Int("space");
