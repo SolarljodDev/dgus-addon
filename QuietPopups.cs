@@ -12,6 +12,7 @@ namespace DgusPlus
         static readonly string[] Known =
         {
             "Loading successful", "Save done!",
+            "\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e!",
             "Generation done，File name is： HMIConfig.bin，save under current project",
             "Config file is generated successfully!", "Export successfully！",
 
