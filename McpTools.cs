@@ -124,6 +124,9 @@ namespace DgusPlus
                 "\"overwrite\":{\"type\":\"boolean\"}", "\"font\",\"w\",\"id\"", delegate(Args a) { return FontTool(a, true); });
             AddOffUi("list_system_fonts", "Установленные в Windows шрифты (имя и файл) — для параметра font.",
                 "\"filter\":{\"type\":\"string\"}", "", ListSystemFonts);
+            AddOffUi("generate_icl", "Build ICL using the DGUS Icon Tool on a separate desktop without moving the cursor. Returns its size and 256 KiB block count.",
+                "\"folder\":{\"type\":\"string\"},\"output\":{\"type\":\"string\"},\"overwrite\":{\"type\":\"boolean\"}",
+                "\"folder\",\"output\"", delegate(Args a) { return IconTool.Generate(a.Str("folder"), a.Str("output"), a.Bool("overwrite", false)); });
             Add("generate_config", "Кнопка Generate DGUS: пересобрать 13TouchFile.bin/14ShowFile.bin/22_Config.bin из страниц проекта. " +
                 "Нужно после правок элементов, перед заливкой в дисплей. Сообщения DGUS возвращаются текстом.",
                 "", "", GenerateConfig);

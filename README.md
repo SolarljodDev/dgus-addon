@@ -62,3 +62,5 @@ DGUS+ resends the first frame if it is lost.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+**MCP icon libraries:** `generate_icl` takes `folder` (numbered source images) and `output` (absolute `.icl` path). It runs the bundled DGUS Icon Tool on an isolated Windows desktop without moving the user cursor. Existing output is protected unless `overwrite` is true. The result includes the size and number of 256 KiB display blocks; check that all affected IDs are free. Automation targets the Icon Tool bundled with DGUS V7.650.
